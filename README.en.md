@@ -104,6 +104,23 @@ rm -rf node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}
 
 ## Settings
 
+### Per-blank precise mode (local OCR)
+
+For worksheets with many blanks (e.g. chemistry, 10–30 blanks per question), switch **Grading mode** to *Precise (per blank, multiple ticks)*:
+
+1. Local [Xiaomi-OCR-0 (4-bit GGUF)](https://huggingface.co/prithivMLmods/Xiaomi-OCR-0-GGUF) transcribes the whole page first (question numbers, stems, blanks, handwritten answers).
+2. The cloud vision model returns **answer, verdict and bounding box for every blank**.
+3. The renderer draws a tick/cross/half mark next to each blank and writes the correct answer.
+
+Setup:
+
+```bash
+brew install llama.cpp
+./scripts/setup-local-ocr.sh   # ~700MB weights into the app data directory
+```
+
+Then press **Start service** in *Settings → Local OCR* (default `127.0.0.1:18080`). If the service is unavailable, precise mode falls back to standard per-question grading.
+
 ### Grading model
 
 - **Source**: `Cloud (OpenAI-compatible)` or `Local (LM Studio / Ollama, etc.)`

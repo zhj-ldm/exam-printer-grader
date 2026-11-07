@@ -2,7 +2,8 @@
 const sharp = require('sharp');
 const { split } = require('./ocr');
 const { prepareImage } = require('./prepare');
-const { gradeBlock, gradeEssay } = require('./grade');
+const { gradeBlock, gradeEssay, gradePrecise } = require('./grade');
+const { readPage } = require('./localocr');
 const { render } = require('./render');
 
 const PAD = 48;
@@ -153,8 +154,46 @@ async function splitPage(imagePath, onStage = () => {}) {
   };
 }
 
-async function gradeOne({ imagePath, page, block, options = {} }) {
+async function gradeOne({ imagePath, page, block, options = {}, pageText = '' }) {
   const { dataUrl, origin, buf } = await cropBlock(imagePath, block, page);
+
+  // 逐空精确批改：一题可产生多个落点
+  if (options.gradeMode === 'precise') {
+    const r = await gradePrecise({
+      no: block.no,
+      imageDataUrl: dataUrl,
+      standardAnswer: options.standardAnswer,
+      extraPrompt: options.extraPrompt,
+      pageText,
+    });
+    const marks = [];
+    for (const b of r.blanks) {
+      const [bx1, by1, bx2, by2] = b.box;
+      const cx = origin.x0 + (bx1 + bx2) / 2 * origin.w / 1000;
+      const cy = origin.y0 + (by1 + by2) / 2 * origin.h / 1000;
+      const spot = await nudgeToBlank(buf, origin, { x: cx, y: cy }, 40);
+      const text = b.verdict !== 'correct' && options.render?.answers !== false
+        ? (b.correct ? '应: ' + b.correct : b.comment)
+        : (b.comment || '');
+      marks.push({
+        x: spot.x,
+        y: spot.y,
+        verdict: b.verdict,
+        point: true,
+        blank: b.i,
+        text,
+        textX: Math.round(Math.max(30, Math.min(page.width - 220, origin.x0 + bx1 * origin.w / 1000))),
+        textY: Math.round(Math.max(24, origin.y0 + by1 * origin.h / 1000 - 16)),
+      });
+    }
+    if (!marks.length) {
+      // 模型没给出可用空位框时退回整题单点
+      const spot = spotFor(block, page);
+      marks.push(toMark(r, spot, page, options.render || {}));
+    }
+    return { result: r, marks };
+  }
+
   const r = await gradeBlock({
     no: block.no,
     imageDataUrl: dataUrl,
@@ -212,6 +251,12 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
   if (!blocks.length) throw new Error('没有切出题目');
   onStage({ stage: 'split', label: `找到 ${blocks.length} 道题`, progress: 1 });
 
+  let pageText = '';
+  if (options.gradeMode === 'precise') {
+    onStage({ stage: 'ocr', label: '本地 OCR 预处理整页' });
+    try { pageText = (await readPage(imagePath)) || ''; } catch (_) { pageText = ''; }
+  }
+
   const results = new Array(blocks.length).fill(null);
   const marks = [];
   let done = 0;
@@ -220,11 +265,12 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
     const b = blocks[i];
     onStage({ stage: 'grade', label: `批改第 ${b.no} 题`, done, total: blocks.length });
     try {
-      const { result, mark } = await gradeOne({ imagePath, page, block: b, options });
-      results[i] = { ...result, page_box: mark };
-      marks.push(mark);
+      const { result, mark, marks: mks } = await gradeOne({ imagePath, page, block: b, options, pageText });
+      const list = mks || (mark ? [mark] : []);
+      results[i] = { ...result, page_box: list[0] };
+      marks.push(...list);
       done += 1;
-      onStage({ stage: 'grade', label: `第 ${b.no} 题 ${result.verdict}`, done, total: blocks.length });
+      onStage({ stage: 'grade', label: `第 ${b.no} 题 ${result.verdict}${list.length > 1 ? `（${list.length} 空）` : ''}`, done, total: blocks.length });
     } catch (e) {
       done += 1;
       // 批改失败也要在该题位置留下一个“待核”标记，保证每题都有落点

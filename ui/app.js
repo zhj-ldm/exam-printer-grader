@@ -205,6 +205,7 @@ function resetAll() {
 function options() {
   return {
     mode: $('optType').value,
+    gradeMode: $('optGradeMode').value,
     standardAnswer: $('stdAnswer').value,
     extraPrompt: $('extraPrompt').value,
     render: {
@@ -218,6 +219,7 @@ function options() {
 function optionsManual() {
   return {
     mode: $('optType').value,
+    gradeMode: $('optGradeMode').value,
     standardAnswer: $('mStd').value || $('stdAnswer').value,
     extraPrompt: $('mExtra').value || $('extraPrompt').value,
     render: {
@@ -557,6 +559,7 @@ async function openSettings() {
   $('printQuality').value = cfg.printQuality || 'draft';
   $('printColor').value = cfg.printColor || 'color';
   refreshStorage();
+  refreshLocalOcr();
 }
 
 // 打印选项改动即保存
@@ -658,11 +661,39 @@ $('btnCleanTemp').onclick = async () => {
   await refreshStorage();
 };
 
+/* ---- 本地 OCR ---- */
+async function refreshLocalOcr() {
+  try {
+    const st = await API.localOcrStatus();
+    $('ocrUrl').textContent = st.url;
+    $('ocrModel').textContent = st.model;
+    $('ocrBin').textContent = st.bin || '未安装 llama-server';
+    $('ocrState').textContent = st.running ? `运行中（端口 ${st.port}）` : (st.modelsReady ? '未启动（模型已就绪）' : '模型未下载');
+  } catch (e) {
+    $('ocrState').textContent = '检测失败：' + e.message;
+  }
+}
+$('btnOcrCheck').onclick = refreshLocalOcr;
+$('btnOcrStart').onclick = async () => {
+  $('ocrState').textContent = '正在启动…';
+  const r = await API.localOcrStart();
+  log(r.message);
+  await API.setConfig({ localOcr: { enabled: r.ok, url: 'http://127.0.0.1:18080/v1/chat/completions', model: 'Xiaomi-OCR-0' } });
+  await refreshLocalOcr();
+};
+$('btnOcrStop').onclick = async () => {
+  const r = await API.localOcrStop();
+  log(r.message);
+  await API.setConfig({ localOcr: { enabled: false } });
+  await refreshLocalOcr();
+};
+
 /* ---------------- 进度事件 ---------------- */
 API.onStage(s => {
   if (S.resultMode) return;
   const sub = s.total ? `${s.done}/${s.total}` : '';
   if (s.stage === 'grade') setOrb('grade', s.label, sub);
+  else if (s.stage === 'ocr') setOrb('grade', s.label, sub);
   else if (s.stage === 'scan') setOrb('scan', s.label, sub);
   else if (s.stage === 'split') setOrb('split', s.label, sub);
   else if (s.stage === 'render') setOrb('render', s.label, sub);

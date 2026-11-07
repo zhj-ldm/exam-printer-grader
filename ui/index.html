@@ -448,6 +448,13 @@
           </select>
         </div>
         <div class="field">
+          <label>核批方式</label>
+          <select id="optGradeMode">
+            <option value="standard">标准批改（整题一个判定）</option>
+            <option value="precise">精确批改（逐空判定，可多个对勾）</option>
+          </select>
+        </div>
+        <div class="field">
           <label>标准答案（可选，给了以它为准）</label>
           <textarea id="stdAnswer" rows="4" placeholder="例：15. 1 或 5/3（漏解不给分）&#10;16. x−1，代入得 2025"></textarea>
         </div>
@@ -551,6 +558,20 @@
           <button class="ghost" id="btnTestModel">测试连接</button>
           <span id="modelState" style="font-size:11px;color:#79818e"></span>
         </div>
+      </div>
+
+      <div class="sec h">
+        <h4>本地 OCR（逐空精确批改用）</h4>
+        <div class="kv"><span class="k">服务地址</span><span class="v" id="ocrUrl">http://127.0.0.1:18080</span></div>
+        <div class="kv"><span class="k">模型</span><span class="v" id="ocrModel">Xiaomi-OCR-0</span></div>
+        <div class="kv"><span class="k">状态</span><span class="v" id="ocrState">未检测</span></div>
+        <div class="kv"><span class="k">推理器</span><span class="v" id="ocrBin">-</span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btnOcrStart">启动服务</button>
+          <button class="ghost" id="btnOcrStop">停止服务</button>
+          <button class="ghost" id="btnOcrCheck">检测状态</button>
+        </div>
+        <div class="tip" style="margin:8px 0 0">首次使用请执行仓库里的 scripts/setup-local-ocr.sh 下载模型；未启动时逐空模式会自动跳过整页预处理。</div>
       </div>
 
       <div class="sec h">

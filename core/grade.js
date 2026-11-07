@@ -236,4 +236,79 @@ async function gradeEssay({ imageDataUrl, extraPrompt = '' }) {
   };
 }
 
-module.exports = { gradeBlock, gradeEssay, chat, configure };
+function precisePrompt(no, { standardAnswer = '', extraPrompt = '', pageText = '' } = {}) {
+  const std = standardAnswer.trim()
+    ? `\n【标准答案（权威答案，优先以此为准）】\n${standardAnswer.trim()}`
+    : '\n【没有提供标准答案】请先独立解出每个空的标准答案，再逐空比对。';
+  const extra = extraPrompt.trim() ? `\n【老师额外要求】\n${extraPrompt.trim()}` : '';
+  const ctx = pageText.trim()
+    ? `\n【整页 OCR 参考文本（仅作上下文，可能有识别错误，以图片为准）】\n${pageText.trim().slice(0, 6000)}`
+    : '';
+
+  return `这是试卷第 ${no} 题的作答区域。请按“逐空精确批改”方式批改：把这道题里每一个需要填写的空（横线、括号、表格单元格、选择框）单独识别、单独判定。${std}${extra}${ctx}
+
+规则：
+1. 不要预设学科；先读题干判断题型。不要回答“非数学/无法批改”之类的话。
+2. 一道题可能有多个空（常见 2-30 个）。每个空都要单独输出一条，包括已经答对的空，不能漏。
+3. 每个空给出学生实际写的内容；空白则 student 为 ""，verdict 为 "blank"。
+4. 判定按该空的标准答案：correct / partial / wrong / blank / uncertain。等价表达、单位省略、同义术语都算对。
+5. 每个空给出 box：该空（横线或括号）在【本图】中的矩形，归一化 0-1000 的 [x1,y1,x2,y2]，必须贴合空位本身，不要给整题框。
+6. comment 仅错因，15 字内；做对留空。
+7. 选择题若整题只有一个作答痕迹，也要按一个空处理。
+
+只返回 JSON，不要解释：
+{"no":${no},"blanks":[{"i":1,"student":"学生答案","correct":"标准答案","verdict":"correct|partial|wrong|blank|uncertain","box":[x1,y1,x2,y2],"comment":"错因"}],"comment":"整题总评"}`;
+}
+
+function sanitizeBox(box) {
+  if (!Array.isArray(box) || box.length !== 4) return null;
+  const [x1, y1, x2, y2] = box.map(v => Number(v));
+  if (![x1, y1, x2, y2].every(v => Number.isFinite(v) && v >= 0 && v <= 1000)) return null;
+  const nx1 = Math.min(x1, x2), ny1 = Math.min(y1, y2);
+  const nx2 = Math.max(x1, x2), ny2 = Math.max(y1, y2);
+  if (nx2 - nx1 < 8 || ny2 - ny1 < 5) return null;
+  return [nx1, ny1, nx2, ny2];
+}
+
+async function gradePrecise({ no, imageDataUrl, standardAnswer = '', extraPrompt = '', pageText = '' }) {
+  const reply = await chat(
+    precisePrompt(no, { standardAnswer, extraPrompt, pageText }),
+    imageDataUrl,
+    { maxTokens: 2200, retries: 4 }
+  );
+  const item = parseJson(reply);
+  const raw = Array.isArray(item.blanks) ? item.blanks : [];
+  const blanks = raw.map((b, idx) => {
+    let verdict = b.verdict || 'uncertain';
+    if (verdict === 'half' || verdict === 'half_correct' || verdict === '半对') verdict = 'partial';
+    if (verdict === 'blank' && String(b.student || '').trim()) verdict = 'uncertain';
+    return {
+      i: Number(b.i) || idx + 1,
+      student: String(b.student || ''),
+      correct: String(b.correct || ''),
+      comment: String(b.comment || ''),
+      verdict,
+      box: sanitizeBox(b.box),
+    };
+  }).filter(b => b.box);
+
+  const verdicts = blanks.map(b => b.verdict);
+  let verdict = 'uncertain';
+  if (blanks.length) {
+    if (verdicts.every(v => v === 'correct')) verdict = 'correct';
+    else if (verdicts.some(v => v === 'wrong')) verdict = 'wrong';
+    else if (verdicts.some(v => v === 'partial')) verdict = 'partial';
+    else if (verdicts.every(v => v === 'blank')) verdict = 'blank';
+  }
+  return {
+    no,
+    verdict,
+    student: blanks.map(b => `${b.i}.${b.student || '（空）'}`).join('  '),
+    correct: blanks.map(b => `${b.i}.${b.correct || '-'}`).join('  '),
+    comment: item.comment || '',
+    blanks,
+    confidence: 1,
+  };
+}
+
+module.exports = { gradeBlock, gradeEssay, gradePrecise, chat, configure };

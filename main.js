@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const sharp = require('sharp');
 
 // 限制 sharp 的内存缓存，避免长时间运行后内存缓慢上涨
@@ -22,6 +22,7 @@ const { discover, scan, scannerStatus, printerInfo, clearQueue, testPrint } = re
 const { runPipeline, splitPage, gradeOne, pageInfo } = require('./core/pipeline');
 const { render } = require('./core/render');
 const { configure } = require('./core/grade');
+const { configureLocal } = require('./core/localocr');
 
 let win = null;
 app.setName('exam-grader');
@@ -56,6 +57,7 @@ app.whenReady().then(() => {
   // 用本机已保存的设置初始化模型客户端（地址/模型/Key 不写死在代码里）
   const saved = loadCfg();
   configure({ baseUrl: saved.baseUrl, model: saved.model, apiKeys: saved.apiKeys });
+  configureLocal(saved.localOcr || {});
   createWindow();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -124,8 +126,85 @@ ipcMain.handle('config-get', async () => loadCfg());
 ipcMain.handle('config-set', async (_e, patch) => {
   const c = saveCfg(patch);
   configure({ baseUrl: c.baseUrl, model: c.model, apiKeys: c.apiKeys });
+  configureLocal(c.localOcr || {});
   return c;
 });
+
+// ============ 本地 OCR（llama.cpp server）管理 ============
+let ocrProc = null;
+const OCR_PORT = 18080;
+const OCR_DIR = path.join(BASE_DIR, 'models', 'xiaomi-ocr-0');
+const OCR_BIN_CANDIDATES = [
+  '/opt/homebrew/bin/llama-server',
+  '/usr/local/bin/llama-server',
+  path.join(os.homedir(), 'llama.cpp/build/bin/llama-server'),
+];
+
+function findLlamaServer() {
+  return OCR_BIN_CANDIDATES.find(p => { try { return fs.existsSync(p); } catch (_) { return false; } });
+}
+
+async function healthCheck(url) {
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(1500) });
+    return r.ok;
+  } catch (_) { return false; }
+}
+
+ipcMain.handle('local-ocr-status', async () => {
+  const up = await healthCheck(`http://127.0.0.1:${OCR_PORT}/health`);
+  return {
+    running: !!ocrProc || up,
+    port: OCR_PORT,
+    url: `http://127.0.0.1:${OCR_PORT}/v1/chat/completions`,
+    model: path.basename(OCR_DIR),
+    bin: findLlamaServer() || null,
+    modelsReady: ['Xiaomi-OCR-0.Q4_K_M.gguf', 'mmproj.gguf']
+      .every(f => fs.existsSync(path.join(OCR_DIR, f))),
+  };
+});
+
+ipcMain.handle('local-ocr-start', async () => {
+  if (await healthCheck(`http://127.0.0.1:${OCR_PORT}/health`)) {
+    return { ok: true, message: `服务已在运行（端口 ${OCR_PORT}）` };
+  }
+  const bin = findLlamaServer();
+  if (!bin) return { ok: false, message: '未找到 llama-server，请先执行 scripts/setup-local-ocr.sh' };
+  const model = path.join(OCR_DIR, 'Xiaomi-OCR-0.Q4_K_M.gguf');
+  const mmproj = path.join(OCR_DIR, 'mmproj.gguf');
+  if (!fs.existsSync(model) || !fs.existsSync(mmproj)) {
+    return { ok: false, message: '模型文件不完整，请先执行 scripts/setup-local-ocr.sh' };
+  }
+  try {
+    ocrProc = spawn(bin, [
+      '-m', model, '--mmproj', mmproj,
+      '-c', '8192', '-ngl', '99', '--host', '127.0.0.1', '--port', String(OCR_PORT), '-np', '1',
+    ], { stdio: 'ignore' });
+    ocrProc.on('exit', () => { ocrProc = null; });
+  } catch (e) {
+    return { ok: false, message: '启动失败：' + e.message };
+  }
+
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 1000));
+    if (await healthCheck(`http://127.0.0.1:${OCR_PORT}/health`)) {
+      return { ok: true, message: `本地 OCR 已启动（端口 ${OCR_PORT}）` };
+    }
+  }
+  return { ok: false, message: '启动超时，请检查 llama-server 版本是否支持该模型' };
+});
+
+ipcMain.handle('local-ocr-stop', async () => {
+  if (ocrProc) {
+    try { ocrProc.kill('SIGTERM'); } catch (_) {}
+    ocrProc = null;
+    return { ok: true, message: '已停止本地 OCR' };
+  }
+  return { ok: true, message: '本地 OCR 未由本程序启动' };
+});
+
+app.on('quit', () => { try { if (ocrProc) ocrProc.kill('SIGTERM'); } catch (_) {} });
 
 ipcMain.handle('model-test', async (_e, { baseUrl, model, apiKeys }) => {
   const b = (baseUrl || '').trim() || 'https://api.openai.com/v1/chat/completions';
