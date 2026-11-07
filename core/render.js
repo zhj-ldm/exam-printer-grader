@@ -136,7 +136,8 @@ function esc(s) {
 
 const HAND_FONT = 'Hannotate SC, Xingkai SC, Kaiti SC, STKaiti';
 
-async function findBlankY(imagePath, W, H, needed = 150) {
+// 找页面下半部最后一行“真正的深色手写”位置；忽略浅色格子线和页码等小字
+async function findContentBottomY(imagePath, W, H) {
   try {
     const sw = 600;
     const { data, info } = await sharp(imagePath)
@@ -145,31 +146,29 @@ async function findBlankY(imagePath, W, H, needed = 150) {
       .raw()
       .toBuffer({ resolveWithObject: true });
     const cols = info.width, rows = info.height;
-    const blank = new Uint8Array(rows);
-    for (let r = 0; r < rows; r++) {
-      let dark = 0;
-      for (let c = 0; c < cols; c += 3) {
-        if (data[r * cols + c] < 120) dark += 1;
-      }
-      blank[r] = (dark / (cols / 3)) < 0.012 ? 1 : 0;
-    }
     const scale = H / rows;
-    const startRow = Math.floor(rows * 0.45);
-    let best = null, runStart = -1;
-    for (let r = startRow; r <= rows; r++) {
-      if (r < rows && blank[r]) { if (runStart < 0) runStart = r; }
-      else if (runStart >= 0) {
-        const len = r - runStart;
-        if (len >= needed / scale && (!best || len > best.len)) best = { start: runStart, len };
-        runStart = -1;
+    for (let r = rows - 1; r >= Math.floor(rows * 0.22); r--) {
+      let dark = 0;
+      for (let c = 0; c < cols; c += 2) {
+        if (data[r * cols + c] < 70) dark += 1;
       }
+      if (dark / (cols / 2) > 0.02) return Math.round(r * scale);
     }
-    if (!best) return null;
-    const y = Math.round(best.start * scale) + 30;
-    return Math.min(H - 40, y);
-  } catch (_) {
-    return null;
+  } catch (_) { /* 分析失败就退回默认位置 */ }
+  return 0;
+}
+
+// 按实际像素宽度折行（中文按字号，英文数字按 0.55 字号估算）
+function wrapText(text, maxWidth, fs) {
+  const out = [];
+  let cur = '', w = 0;
+  for (const ch of String(text)) {
+    const cw = /[^\x00-\xff]/.test(ch) ? fs : fs * 0.55;
+    if (w + cw > maxWidth && cur) { out.push(cur); cur = ''; w = 0; }
+    cur += ch; w += cw;
   }
+  if (cur) out.push(cur);
+  return out.length ? out : [''];
 }
 
 async function render(imagePath, page, marks, outPath, opts = {}) {
@@ -203,7 +202,8 @@ async function render(imagePath, page, marks, outPath, opts = {}) {
       } else if (m.verdict === 'partial') {
         body += halfMark(mx, my, 42, seed);
       } else {
-        body += `<text x="${mx}" y="${my + 16}" font-size="46" fill="#1a3cb0" font-family="${HAND_FONT}">?</text>`;
+        // 空白/待核等未定结论一律按错误画出叉，保证每题都有明确标记
+        body += crossMark(mx, my, 33, seed);
       }
     }
 
@@ -238,37 +238,65 @@ async function render(imagePath, page, marks, outPath, opts = {}) {
   if (opts.summary) {
     const s = opts.summary;
     const x = 80;
-    // 优先寻找页面下半部的空白带，避免评语压住正文
-    let y = await findBlankY(imagePath, W, H, 150);
-    if (y == null) y = Math.round(H * 0.72);
+    const availW = W - x * 2;
     const scoreText = s.score != null ? `${s.score}${s.fullScore ? ' / ' + s.fullScore : ''}` : '-';
-    body += `<text x="${x}" y="${y}" font-size="54" fill="#c81e1e" font-family="${HAND_FONT}">得分 ${esc(scoreText)}</text>`;
-    y += 46;
     const dims = s.dims && typeof s.dims === 'object' ? Object.entries(s.dims) : [];
-    if (dims.length) {
-      const txt = dims.map(([k, v]) => `${k} ${v}`).join('　');
-      body += `<text x="${x}" y="${y}" font-size="30" fill="#c81e1e" font-family="${HAND_FONT}">${esc(txt)}</text>`;
-      y += 40;
+    const dimsText = dims.map(([k, v]) => `${k} ${v}`).join('　');
+    const corr = (Array.isArray(s.corrections) ? s.corrections : []).map(c => {
+      if (typeof c === 'string') return { text: c };
+      return {
+        text: `${c.from ? c.from + ' → ' : ''}${c.to || ''}${c.reason ? '（' + c.reason + '）' : ''}`,
+      };
+    }).filter(c => c.text.trim());
+
+    // 按字号缩放排一遍，算出整块评语需要多高，避免写到“修改建议”就没空间
+    function layout(scale) {
+      const fsScore = Math.round(54 * scale);
+      const fsDim = Math.round(30 * scale);
+      const fsBody = Math.round(34 * scale);
+      const fsHead = Math.round(30 * scale);
+      const fsCorr = Math.round(28 * scale);
+      const stepScore = Math.round(46 * scale);
+      const stepDim = Math.round(40 * scale);
+      const stepBody = Math.round(44 * scale);
+      const stepHead = Math.round(38 * scale);
+      const stepCorr = Math.round(34 * scale);
+      const commentLines = wrapText(String(s.comment || ''), availW, fsBody);
+      const corrLines = corr.map(c => wrapText(c.text, availW, fsCorr));
+      const corrCount = corrLines.reduce((a, l) => a + l.length, 0);
+      const height = stepScore + (dimsText ? stepDim : 0) + commentLines.length * stepBody
+        + (corr.length ? 8 + stepHead + corrCount * stepCorr : 0);
+      return { fsScore, fsDim, fsBody, fsHead, fsCorr, stepScore, stepDim, stepBody, stepHead, stepCorr, commentLines, corrLines, height };
     }
-    const maxChars = Math.floor((W - x * 2) / (FS * 0.95));
-    const text = String(s.comment || '');
-    for (let i = 0; i < text.length && y < H * 0.92; i += maxChars) {
-      body += `<text x="${x}" y="${y}" font-size="${FS}" fill="#c81e1e" font-family="${HAND_FONT}">${esc(text.slice(i, i + maxChars))}</text>`;
-      y += FS + 10;
+
+    // 从最后一行手写下方开始写；优先用流水线 OCR 给的位置，空间不够就缩小字号，仍不够再整体上移
+    const given = typeof opts.summaryBottomY === 'number' && opts.summaryBottomY > 0 ? opts.summaryBottomY : 0;
+    const bottom = given || await findContentBottomY(imagePath, W, H);
+    let y0 = bottom ? bottom + 40 : Math.round(H * 0.62);
+    let L = layout(1);
+    let avail = H - y0 - 24;
+    if (L.height > avail) {
+      const scale = Math.max(0.62, avail / L.height);
+      L = layout(scale);
+      if (L.height > avail) y0 = Math.max(Math.round(H * 0.3), H - L.height - 24);
     }
-    const corr = Array.isArray(s.corrections) ? s.corrections : [];
+
+    let y = y0;
+    const draw = (text, fs, color) => {
+      y = Math.min(H - 12, y);
+      body += `<text x="${x}" y="${y}" font-size="${fs}" fill="${color || '#c81e1e'}" font-family="${HAND_FONT}">${esc(text)}</text>`;
+    };
+
+    draw(`得分 ${scoreText}`, L.fsScore, '#c81e1e');
+    y += L.stepScore;
+    if (dimsText) { draw(dimsText, L.fsDim, '#c81e1e'); y += L.stepDim; }
+    for (const line of L.commentLines) { draw(line, L.fsBody, '#c81e1e'); y += L.stepBody; }
     if (corr.length) {
       y += 8;
-      body += `<text x="${x}" y="${y}" font-size="30" fill="#c81e1e" font-family="${HAND_FONT}">修改建议：</text>`;
-      y += 38;
-      for (const c of corr) {
-        if (y >= H * 0.95) break;
-        const line = c.from ? `${c.from} → ${c.to}${c.reason ? '（' + c.reason + '）' : ''}`
-          : `${c.to}${c.reason ? '（' + c.reason + '）' : ''}`;
-        for (let i = 0; i < line.length && y < H * 0.95; i += maxChars) {
-          body += `<text x="${x}" y="${y}" font-size="28" fill="#c81e1e" font-family="${HAND_FONT}">${esc(line.slice(i, i + maxChars))}</text>`;
-          y += 34;
-        }
+      draw('修改建议：', L.fsHead, '#c81e1e');
+      y += L.stepHead;
+      for (const lines of L.corrLines) {
+        for (const line of lines) { draw(line, L.fsCorr, '#c81e1e'); y += L.stepCorr; }
       }
     }
   }

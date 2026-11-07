@@ -19,13 +19,19 @@ function textStat(page) {
   return { good, chars };
 }
 
-async function rotate180(imagePath) {
-  const out = path.join(os.tmpdir(), `eg_rot_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.jpg`);
-  await sharp(imagePath).rotate(180).jpeg({ quality: 94, chromaSubsampling: '4:4:4' }).toFile(out);
+async function rotateBy(imagePath, deg) {
+  const out = path.join(os.tmpdir(), `eg_rot_${deg}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.jpg`);
+  await sharp(imagePath).rotate(deg).jpeg({ quality: 94, chromaSubsampling: '4:4:4' }).toFile(out);
   return out;
 }
 
-// 正着扫和倒着扫，OCR 出来的题号、有效文字差别很大
+// 0/90/180/270 各扫一遍太慢，先看 0° 是否已经明显正常，再先试最常见的 180°，最后才试 90°/270°
+function pageScore(p) {
+  const n = countQuestionNumbers(p);
+  const s = textStat(p);
+  return { n, good: s.good, chars: s.chars, score: n * 100 + Math.min(80, s.chars) };
+}
+
 async function orient(imagePath) {
   let p0;
   try {
@@ -33,24 +39,41 @@ async function orient(imagePath) {
   } catch (_) {
     return { imagePath, page: null, rotation: 0 };
   }
-  const n0 = countQuestionNumbers(p0);
-  const s0 = textStat(p0);
-  // 能认出两个以上题号，基本可以确定方向正确，省掉一次 OCR
-  if (n0 >= 2) return { imagePath, page: p0, rotation: 0 };
+  const s0 = pageScore(p0);
+  // 题号够多、有效文字也够多，基本可确定方向正确，省掉后续 OCR
+  if (s0.n >= 3 && s0.chars >= 40) return { imagePath, page: p0, rotation: 0 };
 
-  let rotPath = null;
-  try {
-    rotPath = await rotate180(imagePath);
-    const p1 = await paddleLines(rotPath);
-    const n1 = countQuestionNumbers(p1);
-    const s1 = textStat(p1);
-    // 题号变多，或题号一样多但文字明显更多更完整 → 说明原图是倒的
-    if (n1 > n0 || (n1 === n0 && s1.good > s0.good && s1.chars > s0.chars * 1.35)) {
-      return { imagePath: rotPath, page: p1, rotation: 180 };
+  const tried = [];
+  const attempt = async deg => {
+    let rotPath = null;
+    try {
+      rotPath = await rotateBy(imagePath, deg);
+      const p = await paddleLines(rotPath);
+      tried.push({ deg, path: rotPath, page: p, ...pageScore(p) });
+    } catch (_) {
+      if (rotPath) { try { fs.unlinkSync(rotPath); } catch (_) {} }
     }
-  } catch (_) { /* 旋转后识别失败就保持原样 */ }
-  if (rotPath) { try { fs.unlinkSync(rotPath); } catch (_) {} }
-  return { imagePath, page: p0, rotation: 0 };
+  };
+
+  const needMore = () => {
+    const best = tried.reduce((a, b) => (b.score > a.score ? b : a), s0);
+    return best.n < 2 || best.chars < 8;
+  };
+
+  await attempt(180);
+  // 180° 已经能明显读出文字就不必再试横向旋转
+  if (needMore()) await attempt(90);
+  if (needMore()) await attempt(270);
+
+  const best = tried.reduce((a, b) => (b.score > a.score ? b : a), { deg: 0, path: null, page: p0, ...s0 });
+  for (const t of tried) {
+    if (t.path !== best.path) { try { fs.unlinkSync(t.path); } catch (_) {} }
+  }
+  if (best.deg === 0) {
+    if (best.path) { try { fs.unlinkSync(best.path); } catch (_) {} }
+    return { imagePath, page: p0, rotation: 0 };
+  }
+  return { imagePath: best.path, page: best.page, rotation: best.deg };
 }
 
 // 检测内容包围盒，裁掉四周大片空白；优先用 OCR 文字行定位，避免被纸张/扫描边界干扰
@@ -144,7 +167,7 @@ async function prepareImage(imagePath, onStage = () => {}) {
   const t = await trim(o.imagePath, o.page);
   let page = o.page;
   if (t.cropped) page = shiftPage(page, t.box);
-  if (o.rotation === 180 && o.imagePath !== t.imagePath) {
+  if (o.rotation !== 0 && o.imagePath !== t.imagePath) {
     try { fs.unlinkSync(o.imagePath); } catch (_) {}
   }
   return {

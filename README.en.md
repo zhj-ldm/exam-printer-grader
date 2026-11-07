@@ -37,7 +37,10 @@ This is intentional. Reprinting works with any paper, printer and binding, while
 ## Features
 
 - **One-click pipeline**: scan, split, grade, render in one flow.
-- **Automatic orientation**: detects upside-down (180°) pages by OCR confidence and rotates them back.
+- **Multi-page scanning**: choose Single / Multi in auto mode. In multi mode, scan page after page with a "next page" prompt, then press Start to grade all pages; results are viewed and printed page by page.
+- **Scannable answer key**: press "Scan answer" next to the standard-answer box to scan an answer sheet and auto-format it as "no. answer" lines.
+- **Optional AI review pass**: before final rendering, the graded page image is sent back to the model to check for missed questions and badly placed ticks/comments, then re-rendered after adjustments. Review rounds are configurable (default 1, max 3) and work with any grading mode.
+- **Automatic orientation**: handles upside-down and sideways pages (0° / 90° / 180° / 270°) by OCR scoring.
 - **Automatic margin trimming**: locates the content area and removes blank scanner borders; printed output fills the page.
 - **Reliable question splitting**: anchored on OCR-detected question numbers; boundaries are intentionally generous so answers are never cut off.
 - **Handwritten-style marks**: smooth, slightly jittery ticks; half-marks are a tick crossed by a slash; crosses are two offset strokes; comments are placed near answers.
@@ -53,7 +56,7 @@ This is intentional. Reprinting works with any paper, printer and binding, while
 Scanner (eSCL)
    │  HTTP image fetch
    ▼
-Auto-orient (OCR score @ 0° vs 180°)
+Auto-orient (OCR score @ 0° / 90° / 180° / 270°)
    ▼
 Trim blank margins (OCR text bbox → crop)
    ▼
@@ -109,9 +112,10 @@ rm -rf node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}
 For worksheets with many blanks (e.g. chemistry, 10–30 blanks per question), switch **Grading mode** to *Precise (per blank, multiple ticks)* and choose a **grading scope**:
 
 1. **Split first**: blocks are cropped by question number; the cloud vision model returns **answer, verdict and bounding box for every blank**; the renderer draws a tick/cross/half mark next to each blank.
-2. **Whole page**: no splitting — the full page goes straight to the cloud vision model, which finds every blank itself. Best for irregular layouts or pages without question numbers; falls back to split grading automatically if it fails.
+2. **Model framing**: the vision model first frames each question's full region (number, stem, options/material, answer area) like a question-search app, then grades each crop. Best for two questions sharing one row, irregular layouts or missing question numbers; falls back to split grading on failure.
+3. **Whole page**: no splitting — the full page goes straight to the cloud vision model, which finds every blank itself. Best for irregular layouts or pages without question numbers; falls back to split grading automatically if it fails.
 
-Neither mode requires downloading any local OCR model.
+None of these modes requires downloading a local OCR model.
 
 ### Grading model
 
@@ -195,7 +199,7 @@ grade-app/
 
 #### `core/prepare.js`
 
-- `orient()`: counts detected question numbers; ≥2 means upright. Otherwise rotate 180° and compare question counts and text mass.
+- `orient()`: scores OCR results (question numbers + valid text mass) at 0°, 180°, then 90°/270° when still ambiguous, and picks the best orientation.
 - `trim()`: uses the OCR text bbox (3% horizontal, 2.5% top, 10% bottom padding); without text, falls back to dark-pixel distribution while ignoring noise and paper edges.
 - Cropping is translation-only, so OCR coordinates are shifted instead of re-recognized.
 

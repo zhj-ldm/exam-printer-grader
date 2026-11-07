@@ -203,6 +203,12 @@
 
   .stage-label { margin-top: 26px; font-size: 14px; color: #c2ccda; letter-spacing: 1px; }
   .stage-sub { margin-top: 4px; font: 11px/1.7 ui-monospace, Menlo, monospace; color: #5b6472; }
+  .stage-links { margin-top: 12px; display: flex; gap: 10px; justify-content: center; }
+  .stage-link {
+    background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.07); color: #7d8797;
+    font-size: 11.5px; padding: 4px 13px; border-radius: 999px; cursor: pointer; transition: .2s;
+  }
+  .stage-link:hover { color: #dce8ff; border-color: rgba(74,134,255,.4); background: rgba(74,134,255,.1); }
 
   /* ---- 开关小球 ---- */
   .tray { display: flex; gap: 26px; margin-top: 34px; }
@@ -280,6 +286,39 @@
   .result-orb-blob.print::after { animation-delay: -1.6s; }
   .result-orb:hover .result-orb-blob { transform: scale(1.03); }
   .result-orb-text { position: relative; font-size: 13px; color: #eef5ff; letter-spacing: 2px; text-shadow: 0 1px 8px rgba(0,20,60,.8); }
+  .result-page { display: flex; align-items: center; font-size: 12px; color: #9fb2cc; letter-spacing: 1px; padding: 0 4px; }
+
+  /* ---- 多页收集：上下两半 ---- */
+  .collect { display: none; flex-direction: column; gap: 14px; width: clamp(300px, 42vh, 470px); }
+  body.collecting .collect { display: flex; }
+  body.collecting .orb-wrap, body.collecting .tray { display: none; }
+  .collect-head { text-align: center; color: #8e97a5; font-size: 12px; line-height: 1.8; }
+  .collect-head b { display: block; color: #dfe8f5; font-size: 14px; letter-spacing: 1px; }
+  .collect-btn {
+    position: relative; height: 96px; border: 0; background: none; cursor: pointer; color: #eef5ff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  }
+  .collect-blob {
+    position: absolute; inset: 0; border-radius: 22px; overflow: hidden;
+    background:
+      radial-gradient(120% 160% at 30% 8%, rgba(255,255,255,.5), rgba(255,255,255,0) 46%),
+      linear-gradient(100deg, #4d86ff 0%, #16377f 56%, #081026 100%);
+    box-shadow: 0 0 30px rgba(74,134,255,.35), inset 0 0 18px rgba(190,220,255,.24);
+    transition: transform .3s;
+  }
+  .collect-blob.start {
+    background:
+      radial-gradient(120% 160% at 30% 8%, rgba(255,255,255,.5), rgba(255,255,255,0) 46%),
+      linear-gradient(100deg, #38e0a4 0%, #0d5c3c 58%, #04211a 100%);
+    box-shadow: 0 0 30px rgba(52,211,153,.35), inset 0 0 18px rgba(190,255,230,.22);
+  }
+  .collect-txt { position: relative; font-size: 16px; letter-spacing: 3px; }
+  .collect-btn em { position: relative; font-style: normal; font-size: 11.5px; color: rgba(235,245,255,.62); letter-spacing: .5px; }
+  .collect-btn:hover .collect-blob { transform: scale(1.02); }
+  .collect-btn:disabled { opacity: .5; cursor: default; }
+
+  .label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .label-row label { margin-bottom: 0 !important; }
   @keyframes pillFlow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.1); } }
   @keyframes sheen { 0%, 52% { transform: translateX(-130%); } 86%, 100% { transform: translateX(130%); } }
 
@@ -302,6 +341,23 @@
   }
   textarea:focus, select:focus { border-color: rgba(74,134,255,.5); box-shadow: 0 0 0 3px rgba(74,134,255,.09); }
   .tip { font-size: 11.5px; color: #5b6472; line-height: 1.9; margin: 4px 0 18px; }
+  /* 主提示词：右栏唯一的主角，占满大半栏高 */
+  .master {
+    height: calc(100vh - 420px);
+    min-height: 200px;
+    width: 100%;
+    resize: none;
+    background: rgba(8,11,15,.9);
+    border: 1px solid rgba(74,134,255,.18);
+    border-radius: 13px;
+    padding: 14px 15px;
+    font: 13.5px/1.95 "PingFang SC", sans-serif;
+    color: #dfe4ea;
+    outline: none;
+    transition: .25s;
+  }
+  .master:focus { border-color: rgba(74,134,255,.55); box-shadow: 0 0 0 3px rgba(74,134,255,.1); }
+  .master-tip { font-size: 11.5px; color: #5b6472; line-height: 1.8; margin-top: 8px; }
   .ghost {
     background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #c3cbd8;
     padding: 9px 20px; border-radius: 999px; font-size: 12.5px; cursor: pointer; transition: .25s;
@@ -392,6 +448,81 @@
   }
   .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   .row .ghost { font-size: 12px; }
+
+  .prompt-head { display: flex; align-items: center; gap: 10px; }
+  .save-hint { font-size: 11px; color: #5b6472; min-height: 14px; }
+  .preset-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .preset-chip {
+    padding: 5px 11px; border-radius: 999px; font-size: 11.5px; cursor: pointer;
+    color: #8fb6e8; border: 1px solid rgba(120,170,255,.22); background: rgba(70,130,220,.10);
+    font-family: var(--font-ui);
+  }
+  .preset-chip:hover { background: rgba(70,130,220,.22); border-color: rgba(120,170,255,.4); }
+  .preset-tip { font-size: 10.5px; color: #5b6472; }
+  .save-hint.ok { color: #4fbf83; }
+  .inline-row { display: flex; align-items: center; gap: 12px; }
+  .field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .field-note { font-size: 10.5px; color: #5b6472; }
+  .btn-soft {
+    padding: 7px 13px; border-radius: 999px; font-size: 12px;
+    border: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.05);
+    color: #c3cbd8; transition: .2s;
+  }
+  .btn-soft:hover { border-color: rgba(74,134,255,.45); color: #fff; }
+
+  .grid-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .grid-label { font-size: 12px; color: #c3cbd8; }
+  .grid-label.dim { color: #5b6472; font-size: 11px; }
+  .grid-unit { font-size: 11px; color: #5b6472; }
+  .grid-spacer { flex: 1; }
+  .switch {
+    position: relative; width: 40px; height: 22px; flex: 0 0 auto;
+    border-radius: 11px; border: 1px solid rgba(255,255,255,.09); padding: 0; cursor: pointer;
+    background: rgba(255,255,255,.08); transition: background .18s, border-color .18s;
+  }
+  .switch .knob {
+    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: #aeb7c6; box-shadow: 0 1px 3px rgba(0,0,0,.35);
+    transition: transform .18s, background .18s;
+  }
+  .switch.on { background: rgba(74,134,255,.24); border-color: rgba(74,134,255,.5); }
+  .switch.on .knob { transform: translateX(18px); background: #4a86ff; }
+  .num {
+    width: 56px; padding: 6px 8px; font-size: 12px; text-align: center;
+    border-radius: 9px; border: 1px solid rgba(255,255,255,.07);
+    background: rgba(8,11,15,.8); color: var(--text); outline: none; transition: .2s;
+  }
+  .panel textarea.answer {
+    width: 100%; height: 96px; margin-top: 8px; resize: vertical;
+    font-size: 12px; line-height: 1.6; padding: 10px 12px;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,.07);
+    background: rgba(8,11,15,.8); color: var(--text);
+  }
+  textarea::placeholder { color: #49515e; }
+  .panel textarea.answer:focus, .num:focus {
+    outline: none; border-color: rgba(74,134,255,.5);
+    box-shadow: 0 0 0 3px rgba(74,134,255,.09);
+  }
+  .set-bar {
+    margin: 10px 12px 14px; padding: 10px 10px 9px;
+    border-radius: 12px; background: rgba(255,255,255,.03);
+    border: 1px solid rgba(255,255,255,.06);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .set-row { display: flex; align-items: center; gap: 8px; }
+  .set-row select {
+    flex: 1; min-width: 0; font-size: 12px; padding: 6px 8px;
+    border-radius: 8px; border: 1px solid rgba(255,255,255,.07);
+    background: rgba(8,11,15,.8); color: var(--text);
+  }
+  .set-row select:focus { outline: none; border-color: rgba(74,134,255,.5); }
+  .set-add {
+    width: 28px; height: 28px; flex: 0 0 auto; border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.05);
+    color: #6c9bff; font-size: 16px; line-height: 1; cursor: pointer; transition: .2s;
+  }
+  .set-add:hover { background: rgba(74,134,255,.14); border-color: rgba(74,134,255,.45); color: #fff; }
+  .set-hint { font-size: 10.5px; color: #5b6472; padding-left: 2px; }
 </style>
 </head>
 <body class="mode-auto">
@@ -410,6 +541,7 @@
       <div class="hist-head">
         <span>历史</span>
         <button class="mini-text" id="btnLoadHistory">载入</button>
+        <button class="mini-text" id="btnClear">清空</button>
         <div class="nav">
           <button id="btnPrev" title="上一张" disabled>‹</button>
           <button id="btnNext" title="下一张" disabled>›</button>
@@ -419,6 +551,13 @@
         <div class="hist-empty">启动时不自动载入<br />点「载入」回看已保存的结果</div>
       </div>
       <div class="hist-foot"><button class="mini-text" id="btnOpenStore">打开存储目录</button></div>
+      <div class="set-bar">
+        <div class="set-row">
+          <select id="setSel"><option value="">不指定（AI 自由批改）</option></select>
+          <button class="set-add" id="btnNewSet" title="新建作业">＋</button>
+        </div>
+        <div class="set-hint" id="setHint">答案与批改会存到当前作业</div>
+      </div>
     </aside>
 
     <section class="stage" id="stage">
@@ -435,7 +574,25 @@
             <div class="orb-core"><span id="orbText">待机</span></div>
           </div>
           <div class="stage-label" id="stageLabel">点击球体开始</div>
-          <div class="stage-sub" id="stageSub">扫描 → 识别题号 → 批改 → 出图</div>
+          <div class="stage-sub" id="stageSub">扫描 → 定位题号 / 切题 → 批改 → 出图</div>
+          <div class="stage-links">
+            <button class="stage-link" id="btnMultiScan">整套多页</button>
+            <button class="stage-link" id="btnMultiPick">上传图片</button>
+          </div>
+        </div>
+
+        <div class="collect" id="collect">
+          <div class="collect-head"><b id="collectCount">已扫描 1 页</b><span>换好下一张纸后再扫；全部放完就点「开始」</span></div>
+          <button class="collect-btn" id="btnNextPage">
+            <span class="collect-blob"></span>
+            <span class="collect-txt">下一页</span>
+            <em>扫描下一张</em>
+          </button>
+          <button class="collect-btn start" id="btnStartGrade">
+            <span class="collect-blob start"></span>
+            <span class="collect-txt">开始</span>
+            <em>扫描结束，进入批改</em>
+          </button>
         </div>
 
         <div class="tray" id="tray">
@@ -451,38 +608,60 @@
 
     <aside class="panel" id="panel">
       <section class="panel-sec on" id="auto-panel">
-        <div class="panel-title">批改要求</div>
-        <div class="field">
+        <div class="prompt-head">
+          <div class="panel-title" style="margin:0">主提示词</div>
+          <button class="mini-text" id="btnSavePrompt">保存提示词</button>
+          <span class="save-hint" id="saveHint"></span>
+        </div>
+        <textarea id="masterPrompt" class="master" spellcheck="false" placeholder="以阅卷老师的身份批改这张卷子：做对的打勾，做错的打叉并写一句 15 字以内的错因；勾叉直接打在学生答案旁边（打在题上），贴近作答、不要压住字，不要统一排到页面右边。"></textarea>
+        <div class="preset-row">
+          <button class="preset-chip" data-preset="exam">改卷模式预设</button>
+          <button class="preset-chip" data-preset="essay">作文模式预设</button>
+          <span class="preset-tip">点一下填入对应模式的默认要求，可再自行修改</span>
+        </div>
+        <div class="master-tip">批改行为几乎全由它决定：判分标准、勾叉位置、评语长度、作文评分维度都可以直接写在这里。</div>
+
+        <div class="field" style="margin-top:16px">
+          <div class="field-head">
+            <label>定位方式</label>
+            <span class="field-note">参考网格只给 AI 看，不出现在成图</span>
+          </div>
+          <div class="grid-row">
+            <button class="switch on" id="gridSwitch" role="switch" aria-checked="true"><span class="knob"></span></button>
+            <span class="grid-label">坐标网格</span>
+            <span class="grid-spacer"></span>
+            <span class="grid-label dim">密度</span>
+            <input class="num" id="gridCells" type="number" min="2" max="40" step="1" value="10" />
+            <span class="grid-unit">格</span>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:18px">
+          <div class="field-head">
+            <label>标准答案</label>
+            <span class="field-note">本套作业复用</span>
+          </div>
+          <textarea id="answerBox" class="answer" spellcheck="false" placeholder="扫描答案纸后自动填入，也可以直接粘贴；批改时以它为准。"></textarea>
+          <div class="inline-row" style="margin-top:8px">
+            <button class="mini-text btn-soft" id="btnScanAnswer">扫描答案</button>
+            <span class="save-hint" id="answerHint"></span>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:18px">
+          <div class="field-head">
+            <label>模型</label>
+            <span class="field-note" id="modelNote"></span>
+          </div>
+          <select id="modelSel"></select>
+        </div>
+
+        <div class="field" style="margin-top:18px">
           <label>内容类型</label>
           <select id="optType">
-            <option value="auto">自动判断（有题号按试卷，否则按作文/整页）</option>
-            <option value="exam">只按试卷批改</option>
-            <option value="essay">按作文 / 整页评阅</option>
+            <option value="exam">试卷批改（逐题勾叉 + 评语）</option>
+            <option value="essay">作文评阅（整篇打分 + 旁批）</option>
           </select>
-        </div>
-        <div class="field">
-          <label>批改范围</label>
-          <div class="seg" id="segPage">
-            <button data-page="split" class="on">先切题再批改</button>
-            <button data-page="whole">整页直读</button>
-          </div>
-          <div class="tip" style="margin-top:6px">先切题：按题号切块，逐题逐空批改，位置更准；整页直读：整页图片直接交给云端模型，由它自己找所有空位并判定，不依赖切题（适合排版不规则或题号缺失的卷子）。</div>
-        </div>
-        <div class="field">
-          <label>标记位置</label>
-          <div class="seg" id="segMark">
-            <button data-side="question" class="on">标在题上</button>
-            <button data-side="right">标到最右侧</button>
-          </div>
-          <div class="tip" style="margin-top:6px">标在题上：对勾落在答案附近，可能有定位误差；标到最右侧：统一排在页面右边缘一列，整齐但不对应原位置。</div>
-        </div>
-        <div class="field">
-          <label>标准答案（可选，给了以它为准）</label>
-          <textarea id="stdAnswer" rows="4" placeholder="例：15. 1 或 5/3（漏解不给分）&#10;16. x−1，代入得 2025"></textarea>
-        </div>
-        <div class="field">
-          <label>补充提示词（可选，作为老师额外要求）</label>
-          <textarea id="extraPrompt" rows="3" placeholder="例：解答题过程分占一半；作图题必须用虚线画旋转像"></textarea>
         </div>
         <div class="tip">球体下方四个圆点是批改开关，亮起即开启。<br />点击中央大球，自动扫描并批改。</div>
       </section>
@@ -493,8 +672,9 @@
             <h3>1 · 取图</h3>
             <div class="row">
               <button class="ghost" id="mScan">扫描一页</button>
-              <button class="ghost" id="mPick">选择图片</button>
+              <button class="ghost" id="mPick">上传图片</button>
             </div>
+            <div class="chips" id="mPages"></div>
           </div>
           <div class="step">
             <h3>2 · 识别题号并切题</h3>
@@ -524,7 +704,6 @@
               <label><input type="checkbox" id="mTick" checked /> 勾/叉</label>
               <label><input type="checkbox" id="mText" checked /> AI 文字</label>
               <label><input type="checkbox" id="mAnswer" checked /> 正确答案</label>
-              <label><input type="checkbox" id="mCoords" /> 坐标十字</label>
             </div>
             <div class="row">
               <button class="ghost" id="mRender" disabled>生成批改图</button>
@@ -539,9 +718,22 @@
   </main>
 
   <div class="result-orb-wrap" id="resultOrbWrap">
+    <button class="result-orb" id="resultPrev" title="上一页" hidden>
+      <span class="result-orb-blob"></span>
+      <span class="result-orb-text">上一页</span>
+    </button>
+    <span class="result-page" id="resultPageNo" hidden>1 / 1</span>
+    <button class="result-orb" id="resultNext" title="下一页" hidden>
+      <span class="result-orb-blob"></span>
+      <span class="result-orb-text">下一页</span>
+    </button>
     <button class="result-orb" id="printOrb" title="打印这张结果" hidden>
       <span class="result-orb-blob print"></span>
       <span class="result-orb-text">打印</span>
+    </button>
+    <button class="result-orb" id="printAllOrb" title="打印全部页" hidden>
+      <span class="result-orb-blob print"></span>
+      <span class="result-orb-text">全部打印</span>
     </button>
     <button class="result-orb" id="resultOrb" title="清空并开始下一张">
       <span class="result-orb-blob"></span>
@@ -556,6 +748,14 @@
 
       <div class="sec h">
         <h4>批改模型</h4>
+        <div class="field" style="margin-bottom:10px">
+          <label>已保存的模型</label>
+          <div class="row" style="gap:8px">
+            <select id="profileSel" style="flex:1"></select>
+            <button class="ghost" id="btnProfileSave">存为新预设</button>
+            <button class="ghost" id="btnProfileDel">删除</button>
+          </div>
+        </div>
         <div class="field" style="margin-bottom:10px">
           <label>来源</label>
           <select id="modelSource">
@@ -617,6 +817,14 @@
             <option value="mono">黑白</option>
           </select>
         </div>
+        <div class="field">
+          <label>拼图打印</label>
+          <select class="inp" id="printImpose">
+            <option value="off">关闭：一页一张纸</option>
+            <option value="on">开启：多页拼到一张，最多 4 页</option>
+          </select>
+        </div>
+        <div class="tip" style="margin:0 0 10px">开启后按纸张比例自动选最合适的排布（一般为 2×2），尽量让每页长宽比不变形，每张纸最多拼 4 页；只有一页时仍按原样打印。</div>
         <div class="tip" style="margin:0 0 10px">统一按普通纸输出，避免驱动把试卷当照片而大幅降速。</div>
         <div class="kv"><span class="k">默认打印机</span><span class="v" id="printerDefault">-</span></div>
         <div class="kv"><span class="k">打印机</span><span class="v" id="printerList">-</span></div>

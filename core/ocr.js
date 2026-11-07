@@ -300,7 +300,7 @@ async function tessLines(imagePath) {
 async function split(imagePath, onProgress = () => {}, prePage = null) {
   onProgress('PaddleOCR 识别全文…');
   let page = prePage;
-  if (!page) {
+  if (!page || !Array.isArray(page.lines)) {
     try {
       page = await paddleLines(imagePath);
     } catch (e) {
@@ -308,6 +308,7 @@ async function split(imagePath, onProgress = () => {}, prePage = null) {
       onProgress('PaddleOCR 不可用，改用 tesseract…');
       page = await tessLines(imagePath);
     }
+    if (prePage) page = { ...page, width: prePage.width, height: prePage.height };
   }
 
   const picked = pickNumbers(page.lines, page);
@@ -317,7 +318,7 @@ async function split(imagePath, onProgress = () => {}, prePage = null) {
   const blocks = buildBlocks(picked, page);
   if (blocks.length < 2) throw new Error('没有切出足够的题目');
   onProgress(`找到 ${blocks.length} 道题：${blocks.map(b => b.no).join(', ')}`);
-  return { width: page.width, height: page.height, blocks };
+  return { width: page.width, height: page.height, blocks, lines: page.lines || [] };
 }
 
 function countQuestionNumbers(page) {

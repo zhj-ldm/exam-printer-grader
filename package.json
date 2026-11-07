@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . \"试卷批改\" --platform=darwin --arch=arm64 --out=dist --overwrite --prune=true"
+    "build": "npx electron-packager . \"试卷批改\" --platform=darwin --arch=arm64 --out=dist --overwrite --prune=true"
   },
   "keywords": [
     "electron",
