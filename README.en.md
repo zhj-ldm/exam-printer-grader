@@ -28,9 +28,9 @@ This is intentional. Reprinting works with any paper, printer and binding, while
 
 ## Demo Video
 
-▶ [Play or download the demo](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4)
+▶ [Play or download the demo](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4)
 
-<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
+<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
 
 > Full flow: place the paper on the scanner → press the button → automatic scan and grading → a newly printed graded copy.
 

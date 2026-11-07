@@ -28,9 +28,9 @@
 
 ## 演示视频
 
-▶ [播放或下载演示视频](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4)
+▶ [播放或下载演示视频](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4)
 
-<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
+<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
 
 > 完整流程：把作业放到扫描仪 → 点击按钮 → 自动扫描、批改 → 打印出批改后的新作业。
 
