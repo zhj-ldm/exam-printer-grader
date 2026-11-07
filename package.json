@@ -1,0 +1,29 @@
+{
+  "name": "exam-printer-grader",
+  "version": "1.0.0",
+  "description": "用普通扫描打印一体机复刻讯飞改题机：自动扫描、切题、AI 批改、叠加手写批注并重新打印",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . \"试卷批改\" --platform=darwin --arch=arm64 --out=dist --overwrite --prune=true"
+  },
+  "keywords": [
+    "electron",
+    "ocr",
+    "scanner",
+    "printer",
+    "exam-grading",
+    "openai-compatible"
+  ],
+  "author": "zhj-ldm",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "@gutenye/ocr-node": "^1.4.9",
+    "onnxruntime-node": "^1.22.0",
+    "sharp": "^0.34.3",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}

@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>试卷批改</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.13); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+  :root {
+    --bg: #07090c; --panel: rgba(15,18,23,.9); --line: #1e232a;
+    --text: #e9edf2; --dim: #79818e; --accent: #4a86ff;
+    --ok: #34d399; --bad: #f87171; --warn: #fbbf24;
+  }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 800px at 50% 28%, #101a2e 0%, transparent 62%),
+      radial-gradient(900px 600px at 50% 108%, #0b1220 0%, transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font: 14px/1.6 -apple-system, "PingFang SC", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ================= 顶栏 ================= */
+  header {
+    -webkit-app-region: drag;
+    padding: 14px 22px 12px 88px; flex: none;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .brand { font-size: 14px; font-weight: 600; letter-spacing: 2px; color: #cfd8e6; }
+  .brand::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); vertical-align: 2px; }
+  .modes {
+    -webkit-app-region: no-drag;
+    display: flex; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06);
+    border-radius: 999px; padding: 3px; gap: 2px;
+  }
+  .modes button {
+    background: none; border: 0; color: var(--dim); font-size: 12.5px;
+    padding: 6px 18px; border-radius: 999px; cursor: pointer; transition: .25s;
+  }
+  .modes button.on { background: rgba(74,134,255,.16); color: #dce8ff; box-shadow: inset 0 0 0 1px rgba(74,134,255,.3); }
+  .spacer { flex: 1; }
+  .icon-btn {
+    -webkit-app-region: no-drag;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); color: #8e97a5;
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 15px; transition: .25s;
+  }
+  .icon-btn:hover { color: #e9edf2; border-color: rgba(74,134,255,.4); box-shadow: 0 0 16px rgba(74,134,255,.2); }
+
+  /* ================= 主区 ================= */
+  main { flex: 1; display: flex; min-height: 0; }
+
+  /* ---- 历史栏 ---- */
+  .history {
+    width: 216px; flex: none; display: flex; flex-direction: column; min-height: 0;
+    border-right: 1px solid rgba(255,255,255,.05);
+    background: linear-gradient(180deg, rgba(13,16,21,.72), rgba(9,11,15,.72));
+    backdrop-filter: blur(18px);
+  }
+  .hist-head {
+    display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px;
+    font-size: 12px; color: var(--dim); flex: none;
+  }
+  .mini-text {
+    background: none; border: 0; color: #8fa6c6; font-size: 11.5px; cursor: pointer;
+    padding: 3px 8px; border-radius: 999px; transition: .2s;
+  }
+  .mini-text:hover { color: #dce8ff; background: rgba(74,134,255,.12); }
+  .hist-head .nav { margin-left: auto; display: flex; gap: 4px; }
+  .hist-head .nav button {
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); color: var(--text);
+    width: 25px; height: 23px; border-radius: 7px; cursor: pointer; font-size: 13px; line-height: 1;
+  }
+  .hist-head .nav button:disabled { opacity: .3; cursor: default; }
+  .hist-list { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .hist-empty { color: #4a5058; font-size: 12px; text-align: center; padding: 30px 8px; line-height: 1.9; }
+  .hist-item {
+    position: relative; border: 1px solid rgba(255,255,255,.06); border-radius: 10px;
+    overflow: hidden; cursor: pointer; background: #0a0d11; flex: none; transition: .25s;
+  }
+  .hist-item:hover { border-color: rgba(74,134,255,.35); transform: translateY(-1px); }
+  .hist-item.on { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(74,134,255,.3), 0 8px 24px rgba(0,0,0,.4); }
+  .hist-item img { display: block; width: 100%; height: 104px; object-fit: cover; object-position: top; background: #111; }
+  .hist-item .cap { padding: 6px 9px 7px; font-size: 11px; color: var(--dim); display: flex; justify-content: space-between; gap: 6px; }
+  .hist-item .cap b { color: #b9c3d2; font-weight: 500; }
+  .hist-item .del {
+    position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%;
+    border: 0; background: rgba(8,10,14,.72); color: #98a2b2; font-size: 12px; cursor: pointer;
+    opacity: 0; transition: .2s; line-height: 1;
+  }
+  .hist-item:hover .del { opacity: 1; }
+  .hist-item .del:hover { background: rgba(248,113,113,.85); color: #fff; }
+  .hist-foot { padding: 8px 12px 12px; flex: none; text-align: center; }
+
+  /* ---- 舞台 ---- */
+  .stage { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+
+  .bg-layer {
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center; padding: 34px;
+  }
+  .bg-layer img {
+    max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px;
+    opacity: .32; filter: saturate(.82) contrast(1.04) brightness(.78);
+    transition: opacity .6s ease;
+  }
+  .bg-layer:not(.on) img { opacity: 0; }
+
+  .result-layer {
+    position: absolute; inset: 0; z-index: 1; display: none;
+    align-items: center; justify-content: center; padding: 100px 44px 34px;
+  }
+  .result-layer img {
+    max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px;
+    background: #fff; box-shadow: 0 34px 90px rgba(0,0,0,.6);
+    animation: resultIn .55s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes resultIn { from { opacity: 0; transform: scale(.955) translateY(10px); } to { opacity: 1; transform: none; } }
+
+  /* ================= 液态球 ================= */
+  .center { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; }
+
+  .orb-wrap { display: flex; flex-direction: column; align-items: center; }
+  .orb {
+    --size: clamp(280px, 40vh, 520px);
+    --c1: #5b93ff; --c2: #1a3c9a; --c3: #08122e;
+    --glow: rgba(74,134,255,.40);
+    --hil1: .55; --hil2: .42;
+    width: var(--size); height: var(--size); position: relative; cursor: pointer;
+    transition: transform .5s cubic-bezier(.2,.8,.2,1), filter .5s;
+  }
+  .orb:hover { transform: scale(1.022); }
+
+  .orb-aura {
+    position: absolute; inset: -16%; border-radius: 50%;
+    background: radial-gradient(circle, var(--glow) 0%, transparent 62%);
+    filter: blur(36px); animation: auraPulse 5.6s ease-in-out infinite;
+  }
+  .orb-blob {
+    position: absolute; inset: 0;
+    border-radius: 47% 53% 44% 56% / 56% 44% 56% 44%;
+    background:
+      radial-gradient(circle at 30% 22%, rgba(255,255,255,var(--hil1)), rgba(255,255,255,0) 40%),
+      radial-gradient(circle at 74% 78%, rgba(165,200,255,var(--hil2)), transparent 56%),
+      radial-gradient(circle at 50% 52%, var(--c1) 0%, var(--c2) 54%, var(--c3) 100%);
+    box-shadow:
+      inset 0 0 70px rgba(190,220,255,.22),
+      inset -26px -34px 90px rgba(0,8,30,.65),
+      0 0 80px var(--glow);
+    animation: morph 9.5s ease-in-out infinite, drift 7s ease-in-out infinite;
+  }
+  .orb-sheen {
+    position: absolute; inset: 7%; border-radius: 50%;
+    background: conic-gradient(from 210deg,
+      rgba(255,255,255,0) 0turn, rgba(255,255,255,.26) .12turn,
+      rgba(255,255,255,0) .36turn, rgba(255,255,255,.14) .64turn, rgba(255,255,255,0) .92turn);
+    mix-blend-mode: screen; opacity: .5; filter: blur(2px);
+    -webkit-mask: radial-gradient(closest-side, transparent 52%, #000 66%, transparent 97%);
+    animation: spin 12s linear infinite;
+  }
+  .orb-edge {
+    position: absolute; inset: 2%; border-radius: 50%;
+    border: 1px solid rgba(190,220,255,.10);
+    box-shadow: inset 0 0 40px rgba(140,190,255,.10);
+  }
+  .orb-core {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 6px;
+    color: #eaf3ff; text-shadow: 0 2px 20px rgba(0,20,60,.9);
+    animation: breathe 5.4s ease-in-out infinite; pointer-events: none;
+  }
+  .orb-core span { font-size: clamp(15px, 1.9vh, 21px); letter-spacing: 3px; font-weight: 500; }
+
+  .orb[data-stage="idle"] { --c1: #34455c; --c2: #131c28; --c3: #070b10; --glow: rgba(90,120,160,.12); --hil1: .18; --hil2: .14; }
+  .orb[data-stage="idle"] .orb-sheen { opacity: .18; }
+  .orb[data-stage="idle"] .orb-blob {
+    box-shadow:
+      inset 0 0 50px rgba(190,220,255,.08),
+      inset -26px -34px 90px rgba(0,0,0,.62),
+      0 0 60px var(--glow);
+  }
+  .orb[data-stage="discover"] { --c1: #45d0e8; --c2: #0d5a6b; --c3: #052029; --glow: rgba(69,208,232,.34); }
+  .orb[data-stage="scan"] { --c1: #ffc04a; --c2: #7a5210; --c3: #24170a; --glow: rgba(255,192,74,.34); }
+  .orb[data-stage="split"] { --c1: #4ae0d4; --c2: #0e5c58; --c3: #05201f; --glow: rgba(74,224,212,.32); }
+  .orb[data-stage="grade"] { --c1: #5b93ff; --c2: #1a3c9a; --c3: #08122e; --glow: rgba(74,134,255,.42); }
+  .orb[data-stage="render"] { --c1: #b06aff; --c2: #4a1e8c; --c3: #160733; --glow: rgba(176,106,255,.36); }
+  .orb[data-stage="print"] { --c1: #38e0a4; --c2: #0d5c3c; --c3: #04211a; --glow: rgba(52,211,153,.34); }
+  .orb[data-stage="done"] { --c1: #38e0a4; --c2: #0d5c3c; --c3: #04211a; --glow: rgba(52,211,153,.42); }
+
+  @keyframes morph {
+    0%, 100% { border-radius: 47% 53% 44% 56% / 56% 44% 56% 44%; transform: rotate(0deg); }
+    35% { border-radius: 53% 47% 57% 43% / 45% 57% 43% 57%; transform: rotate(3deg); }
+    70% { border-radius: 44% 56% 49% 51% / 53% 47% 55% 45%; transform: rotate(-2.5deg); }
+  }
+  @keyframes drift { 0%, 100% { translate: 0 0; } 50% { translate: 0 -12px; } }
+  @keyframes auraPulse { 0%, 100% { transform: scale(1); opacity: .8; } 50% { transform: scale(1.12); opacity: 1; } }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+  @keyframes spin { to { transform: rotate(1turn); } }
+
+  .stage-label { margin-top: 26px; font-size: 14px; color: #c2ccda; letter-spacing: 1px; }
+  .stage-sub { margin-top: 4px; font: 11px/1.7 ui-monospace, Menlo, monospace; color: #5b6472; }
+
+  /* ---- 开关小球 ---- */
+  .tray { display: flex; gap: 26px; margin-top: 34px; }
+  .opt { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .opt label { font-size: 11px; color: #5e6673; letter-spacing: .5px; transition: .25s; }
+  .opt.on label { color: #b9c8de; }
+  .mini-orb {
+    width: 62px; height: 62px; border-radius: 50%; border: 0; cursor: pointer; position: relative;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,255,255,.46), rgba(255,255,255,0) 46%),
+      radial-gradient(circle at 50% 62%, #1c2532, #0b1017 100%);
+    box-shadow: inset 0 0 16px rgba(255,255,255,.08), 0 10px 22px rgba(0,0,0,.45);
+    color: #75808f; display: grid; place-items: center;
+    transition: all .38s cubic-bezier(.2,.8,.2,1);
+    animation: miniFloat 7s ease-in-out infinite;
+  }
+  .mini-orb .ico { font-size: 18px; line-height: 1; }
+  .mini-orb:hover { transform: translateY(-2px); color: #b7c4d6; }
+  .opt.on .mini-orb {
+    color: #eef5ff;
+    background:
+      radial-gradient(circle at 32% 26%, rgba(255,255,255,.68), rgba(255,255,255,0) 48%),
+      radial-gradient(circle at 50% 60%, #4a86ff, #133174 62%, #091636 100%);
+    box-shadow: inset 0 0 20px rgba(190,220,255,.34), 0 0 30px rgba(74,134,255,.45);
+  }
+  .opt:nth-child(1) .mini-orb { animation-delay: 0s; }
+  .opt:nth-child(2) .mini-orb { animation-delay: -1.6s; }
+  .opt:nth-child(3) .mini-orb { animation-delay: -3.2s; }
+  .opt:nth-child(4) .mini-orb { animation-delay: -4.8s; }
+  @keyframes miniFloat { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+
+  /* ---- 历史回看 / 返回 ---- */
+  .view-back {
+    position: absolute; left: 20px; bottom: 20px; z-index: 6; display: none;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); color: #b9c3d2;
+    padding: 8px 18px; border-radius: 999px; font-size: 12.5px; cursor: pointer; backdrop-filter: blur(10px);
+  }
+  .view-back:hover { color: #fff; border-color: rgba(74,134,255,.5); }
+  body.view .view-back { display: block; }
+
+  /* ---- 完成后顶部圆形液态按钮 ---- */
+  .result-orb-wrap {
+    position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+    display: none; gap: 14px; z-index: 40; -webkit-app-region: no-drag;
+  }
+  body.result .result-orb-wrap { display: flex; }
+  .result-orb {
+    height: 46px; min-width: 112px; padding: 0 28px; border: 0; background: none; cursor: pointer;
+    position: relative; display: flex; align-items: center; justify-content: center;
+    -webkit-app-region: no-drag;
+  }
+  .result-orb:disabled { cursor: default; opacity: .55; }
+  [hidden] { display: none !important; }
+  .result-orb-blob {
+    position: absolute; inset: 0; border-radius: 999px; overflow: hidden;
+    background:
+      radial-gradient(120% 160% at 30% 8%, rgba(255,255,255,.55), rgba(255,255,255,0) 46%),
+      linear-gradient(100deg, #4d86ff 0%, #16377f 56%, #081026 100%);
+    box-shadow: 0 0 26px rgba(74,134,255,.42), inset 0 0 16px rgba(190,220,255,.28);
+    animation: pillFlow 5.5s ease-in-out infinite;
+    transition: transform .3s;
+  }
+  .result-orb-blob::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(110deg, transparent 18%, rgba(255,255,255,.26) 44%, transparent 68%);
+    animation: sheen 4.4s ease-in-out infinite;
+  }
+  .result-orb-blob.print {
+    background:
+      radial-gradient(120% 160% at 30% 8%, rgba(255,255,255,.55), rgba(255,255,255,0) 46%),
+      linear-gradient(100deg, #38e0a4 0%, #0d5c3c 58%, #052018 100%);
+    box-shadow: 0 0 26px rgba(52,211,153,.42), inset 0 0 16px rgba(190,255,230,.28);
+    animation-delay: -2.2s;
+  }
+  .result-orb-blob.print::after { animation-delay: -1.6s; }
+  .result-orb:hover .result-orb-blob { transform: scale(1.03); }
+  .result-orb-text { position: relative; font-size: 13px; color: #eef5ff; letter-spacing: 2px; text-shadow: 0 1px 8px rgba(0,20,60,.8); }
+  @keyframes pillFlow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.1); } }
+  @keyframes sheen { 0%, 52% { transform: translateX(-130%); } 86%, 100% { transform: translateX(130%); } }
+
+  /* ---- 右栏 ---- */
+  .panel {
+    width: 336px; flex: none; display: flex; flex-direction: column; min-height: 0;
+    border-left: 1px solid rgba(255,255,255,.05);
+    background: linear-gradient(180deg, rgba(13,16,21,.72), rgba(9,11,15,.72));
+    backdrop-filter: blur(18px);
+  }
+  .panel-sec { display: none; flex-direction: column; flex: 1; min-height: 0; padding: 20px 18px; overflow: auto; }
+  .panel-sec.on { display: flex; }
+  .panel-title { font-size: 12px; color: #8b95a5; letter-spacing: 1px; margin-bottom: 14px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11.5px; color: var(--dim); margin-bottom: 6px; }
+  textarea, select {
+    width: 100%; background: rgba(8,11,15,.8); border: 1px solid rgba(255,255,255,.07); color: var(--text);
+    border-radius: 10px; padding: 10px 11px; font: 12.5px/1.75 "PingFang SC", sans-serif;
+    resize: vertical; outline: none; transition: .25s;
+  }
+  textarea:focus, select:focus { border-color: rgba(74,134,255,.5); box-shadow: 0 0 0 3px rgba(74,134,255,.09); }
+  .tip { font-size: 11.5px; color: #5b6472; line-height: 1.9; margin: 4px 0 18px; }
+  .ghost {
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); color: #c3cbd8;
+    padding: 9px 20px; border-radius: 999px; font-size: 12.5px; cursor: pointer; transition: .25s;
+  }
+  .ghost:hover { border-color: rgba(74,134,255,.45); color: #fff; }
+  .ghost:disabled { opacity: .35; cursor: default; }
+  .ghost.wide { width: 100%; padding: 10px 20px; }
+
+  /* ---- 手动模式 ---- */
+  .opts { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 10px; font-size: 12px; color: var(--dim); }
+  .opts label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 13px; }
+  .step h3 { font-size: 11.5px; font-weight: 500; color: #7f8a9a; margin-bottom: 9px; letter-spacing: .8px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 9px; }
+  .chip {
+    background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); border-radius: 9px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer; color: #c3c9d1; transition: .2s;
+  }
+  .chip.done { border-color: rgba(52,211,153,.45); color: var(--ok); }
+  .chip.err { border-color: rgba(248,113,113,.45); color: var(--bad); }
+  .dbg { margin-top: 9px; font-size: 11px; color: #6c7583; line-height: 1.6; white-space: pre-wrap; font-family: Menlo, monospace; }
+  .dbg:empty { display: none; }
+  .dbg b { color: #b9c0c8; font-weight: 600; }
+  .list { max-height: 190px; overflow: auto; margin-top: 12px; }
+  .item { display: flex; gap: 10px; padding: 8px 2px; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 12.5px; }
+  .item .no { width: 38px; flex: none; font-weight: 600; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .mid { color: #60a5fa; }
+  .sub { color: var(--dim); font-size: 11px; margin-top: 1px; }
+  .stage-label, .stage-sub { text-align: center; }
+
+  /* ---- 视图状态 ---- */
+  body.view .center, body.view .bg-layer { display: none; }
+  body.view .result-layer { display: flex; padding: 70px 44px 40px; }
+  body.result header, body.result .history, body.result .panel,
+  body.result .center, body.result .bg-layer { display: none; }
+  body.result .result-layer { display: flex; padding: 80px 14px 14px; }
+  body.result .result-orb { display: flex; }
+  body.result .stage { -webkit-app-region: drag; }
+  .result-orb { -webkit-app-region: no-drag; }
+  body.result .view-back { display: none; }
+  body.mode-manual .center { display: none; }
+  body.mode-manual .bg-layer img { opacity: 1; filter: none; }
+  body.mode-manual .bg-layer { padding: 24px; }
+
+  /* ================= 设置弹层 ================= */
+  .modal { position: fixed; inset: 0; background: rgba(4,6,9,.72); backdrop-filter: blur(6px); display: none; z-index: 50; }
+  .modal.on { display: flex; align-items: center; justify-content: center; }
+  .sheet {
+    width: 620px; max-height: 84vh; overflow: auto; background: #0e1116;
+    border: 1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 24px 26px;
+    box-shadow: 0 30px 90px rgba(0,0,0,.66);
+  }
+  .sheet h2 { font-size: 16px; margin-bottom: 3px; letter-spacing: .5px; }
+  .sheet .note { font-size: 11.5px; color: #5e6673; margin-bottom: 16px; }
+  .sec { background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.06); border-radius: 13px; padding: 15px 16px; margin-bottom: 12px; }
+  .sec.h > h4 { font-size: 12px; color: #9aa9bd; font-weight: 600; margin-bottom: 12px; letter-spacing: .7px; }
+  .kv { display: flex; gap: 10px; font-size: 12px; line-height: 1.95; }
+  .kv .k { color: var(--dim); width: 82px; flex: none; }
+  .kv .v { color: #d3d8de; word-break: break-all; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+  .inp {
+    background: rgba(8,11,15,.9); border: 1px solid rgba(255,255,255,.08); color: var(--text);
+    border-radius: 10px; padding: 9px 11px; font: 12px ui-monospace, Menlo, monospace; width: 100%; outline: none;
+  }
+  select.inp { font-family: -apple-system, "PingFang SC", sans-serif; font-size: 12.5px; }
+  .inp:focus { border-color: rgba(74,134,255,.5); }
+  .mini-log {
+    font: 11px/1.7 ui-monospace, Menlo, monospace; color: #66707e;
+    background: rgba(8,11,15,.9); border-radius: 10px; padding: 9px 11px; margin-top: 10px;
+    max-height: 84px; overflow: auto; white-space: pre-wrap;
+  }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .row .ghost { font-size: 12px; }
+</style>
+</head>
+<body class="mode-auto">
+  <header>
+    <div class="brand">试卷批改</div>
+    <div class="modes" id="modes">
+      <button data-mode="auto" class="on">自动模式</button>
+      <button data-mode="manual">手动模式</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="btnSettings" title="设置">⚙</button>
+  </header>
+
+  <main>
+    <aside class="history" id="historyPanel">
+      <div class="hist-head">
+        <span>历史</span>
+        <button class="mini-text" id="btnLoadHistory">载入</button>
+        <div class="nav">
+          <button id="btnPrev" title="上一张" disabled>‹</button>
+          <button id="btnNext" title="下一张" disabled>›</button>
+        </div>
+      </div>
+      <div class="hist-list" id="histList">
+        <div class="hist-empty">启动时不自动载入<br />点「载入」回看已保存的结果</div>
+      </div>
+      <div class="hist-foot"><button class="mini-text" id="btnOpenStore">打开存储目录</button></div>
+    </aside>
+
+    <section class="stage" id="stage">
+      <div class="bg-layer" id="bgLayer"><img id="preview" alt="" /></div>
+      <div class="result-layer" id="resultLayer"><img id="resultImg" alt="" /></div>
+
+      <div class="center" id="center">
+        <div class="orb-wrap">
+          <div class="orb" id="orb" data-stage="idle" title="点击开始">
+            <div class="orb-aura"></div>
+            <div class="orb-blob"></div>
+            <div class="orb-sheen"></div>
+            <div class="orb-edge"></div>
+            <div class="orb-core"><span id="orbText">待机</span></div>
+          </div>
+          <div class="stage-label" id="stageLabel">点击球体开始</div>
+          <div class="stage-sub" id="stageSub">扫描 → 识别题号 → 批改 → 出图</div>
+        </div>
+
+        <div class="tray" id="tray">
+          <div class="opt on"><button class="mini-orb" id="optTick" title="打勾/叉"><span class="ico">✓</span></button><label>勾 / 叉</label></div>
+          <div class="opt on"><button class="mini-orb" id="optAnswer" title="标注正确答案"><span class="ico">A</span></button><label>答案</label></div>
+          <div class="opt on"><button class="mini-orb" id="optComment" title="AI 批注文字"><span class="ico">✎</span></button><label>批注</label></div>
+          <div class="opt"><button class="mini-orb" id="optAutoPrint" title="批改完成后自动打印"><span class="ico">⎙</span></button><label>批完打印</label></div>
+        </div>
+      </div>
+
+      <button class="view-back" id="btnBackOrb">返 回</button>
+    </section>
+
+    <aside class="panel" id="panel">
+      <section class="panel-sec on" id="auto-panel">
+        <div class="panel-title">批改要求</div>
+        <div class="field">
+          <label>内容类型</label>
+          <select id="optType">
+            <option value="auto">自动判断（有题号按试卷，否则按作文/整页）</option>
+            <option value="exam">只按试卷批改</option>
+            <option value="essay">按作文 / 整页评阅</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>标准答案（可选，给了以它为准）</label>
+          <textarea id="stdAnswer" rows="4" placeholder="例：15. 1 或 5/3（漏解不给分）&#10;16. x−1，代入得 2025"></textarea>
+        </div>
+        <div class="field">
+          <label>补充提示词（可选，作为老师额外要求）</label>
+          <textarea id="extraPrompt" rows="3" placeholder="例：解答题过程分占一半；作图题必须用虚线画旋转像"></textarea>
+        </div>
+        <div class="tip">球体下方四个圆点是批改开关，亮起即开启。<br />点击中央大球，自动扫描并批改。</div>
+      </section>
+
+      <section class="panel-sec" id="manual-panel">
+        <div class="steps">
+          <div class="step">
+            <h3>1 · 取图</h3>
+            <div class="row">
+              <button class="ghost" id="mScan">扫描一页</button>
+              <button class="ghost" id="mPick">选择图片</button>
+            </div>
+          </div>
+          <div class="step">
+            <h3>2 · 切题（本地 OCR）</h3>
+            <div class="row">
+              <button class="ghost" id="mSplit" disabled>识别题号并切块</button>
+              <button class="ghost" id="mSplitView" disabled>切题预览</button>
+              <button class="ghost" id="mPageView" disabled>看整页</button>
+            </div>
+            <div class="dbg" id="mBlockInfo"></div>
+          </div>
+          <div class="step">
+            <h3>3 · 逐题批改（点题号）</h3>
+            <div class="field" style="margin-bottom:8px">
+              <label>标准答案（可选）</label>
+              <textarea id="mStd" rows="2" placeholder="例：15. 1 或 5/3"></textarea>
+            </div>
+            <div class="field" style="margin-bottom:8px">
+              <label>补充提示词（可选）</label>
+              <textarea id="mExtra" rows="2" placeholder="例：漏解不给分"></textarea>
+            </div>
+            <div class="chips" id="mChips"><span class="sub">切题后出现题号</span></div>
+            <div class="dbg" id="mDetail"></div>
+          </div>
+          <div class="step">
+            <h3>4 · 生成结果图</h3>
+            <div class="opts">
+              <label><input type="checkbox" id="mTick" checked /> 勾/叉</label>
+              <label><input type="checkbox" id="mText" checked /> AI 文字</label>
+              <label><input type="checkbox" id="mAnswer" checked /> 正确答案</label>
+              <label><input type="checkbox" id="mCoords" /> 坐标十字</label>
+            </div>
+            <div class="row">
+              <button class="ghost" id="mRender" disabled>生成批改图</button>
+              <button class="ghost" id="mPrint" disabled>打印结果</button>
+              <button class="ghost" id="mShowOrig" disabled>看原图</button>
+            </div>
+          </div>
+        </div>
+        <div class="list" id="list"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div class="result-orb-wrap" id="resultOrbWrap">
+    <button class="result-orb" id="printOrb" title="打印这张结果" hidden>
+      <span class="result-orb-blob print"></span>
+      <span class="result-orb-text">打印</span>
+    </button>
+    <button class="result-orb" id="resultOrb" title="清空并开始下一张">
+      <span class="result-orb-blob"></span>
+      <span class="result-orb-text">下一张</span>
+    </button>
+  </div>
+
+  <div class="modal" id="settingsModal">
+    <div class="sheet">
+      <h2>设置</h2>
+      <div class="note">扫描走 eSCL 直连，打印走系统 CUPS 队列</div>
+
+      <div class="sec h">
+        <h4>批改模型</h4>
+        <div class="field" style="margin-bottom:10px">
+          <label>来源</label>
+          <select id="modelSource">
+            <option value="cloud">云端（OpenAI 兼容）</option>
+            <option value="local">本地（LM Studio / Ollama 等）</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label>接口地址（OpenAI 兼容）</label>
+          <input class="inp" id="modelUrl" placeholder="示例：https://api.openai.com/v1/chat/completions" />
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label>模型名</label>
+          <input class="inp" id="modelName" placeholder="示例：gpt-4o-mini" />
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>API Keys（多个用英文逗号分隔，会轮询）</label>
+          <textarea id="modelKeys" rows="3" placeholder="sk-xxx,sk-yyy"></textarea>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btnSaveModel">保存并应用</button>
+          <button class="ghost" id="btnTestModel">测试连接</button>
+          <span id="modelState" style="font-size:11px;color:#79818e"></span>
+        </div>
+      </div>
+
+      <div class="sec h">
+        <h4>扫描仪</h4>
+        <input class="inp" id="scannerHost" placeholder="192.168.1.86" />
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btnDetect">检测状态</button>
+          <button class="ghost" id="btnDiscover">自动发现</button>
+          <button class="ghost" id="btnSaveCfg">保存地址</button>
+        </div>
+        <div class="kv" style="margin-top:10px"><span class="k">状态</span><span class="v" id="scannerState">未检测</span></div>
+        <div class="kv"><span class="k">型号</span><span class="v" id="scannerModel">-</span></div>
+        <div class="kv"><span class="k">扫描源</span><span class="v" id="scannerSource">-</span></div>
+        <div class="kv"><span class="k">最高 dpi</span><span class="v" id="scannerDpi">-</span></div>
+      </div>
+
+      <div class="sec h">
+        <h4>打印</h4>
+        <div class="field">
+          <label>使用打印机</label>
+          <select class="inp" id="printPrinter"></select>
+        </div>
+        <div class="field">
+          <label>打印速度</label>
+          <select class="inp" id="printQuality">
+            <option value="draft">快速（草稿，最快）</option>
+            <option value="normal">标准</option>
+            <option value="high">高质量（最慢）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>颜色</label>
+          <select class="inp" id="printColor">
+            <option value="color">彩色</option>
+            <option value="mono">黑白</option>
+          </select>
+        </div>
+        <div class="tip" style="margin:0 0 10px">统一按普通纸输出，避免驱动把试卷当照片而大幅降速。</div>
+        <div class="kv"><span class="k">默认打印机</span><span class="v" id="printerDefault">-</span></div>
+        <div class="kv"><span class="k">打印机</span><span class="v" id="printerList">-</span></div>
+        <div class="kv"><span class="k">排队任务</span><span class="v" id="jobList">-</span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btnRefreshPrint">刷新</button>
+          <button class="ghost" id="btnClearQueue">清空队列</button>
+          <button class="ghost" id="btnTestPrint">打印测试页</button>
+        </div>
+      </div>
+
+      <div class="sec h">
+        <h4>存储与清理</h4>
+        <div class="kv"><span class="k">存储目录</span><span class="v" id="storeDir">-</span></div>
+        <div class="kv"><span class="k">占用</span><span class="v" id="storeSize">-</span></div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="btnPickStore">选择目录</button>
+          <button class="ghost" id="btnOpenStore2">打开目录</button>
+          <button class="ghost" id="btnCleanTemp">清理临时文件</button>
+        </div>
+        <div style="font-size:11px;color:#5e6673;margin-top:8px" id="cleanState">临时扫描图会留在存储目录的 out 子目录里，可随时清理。</div>
+      </div>
+
+      <div class="mini-log" id="debugLog"></div>
+      <div class="actions"><button class="ghost" id="btnCloseSettings">关闭</button></div>
+    </div>
+  </div>
+
+<script src="app.js"></script>
+</body>
+</html>
