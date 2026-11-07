@@ -25,6 +25,10 @@ const { configure } = require('./core/grade');
 
 let win = null;
 app.setName('exam-grader');
+// 固定数据目录，避免改名后配置/历史"消失"（沿用 exam-grader 目录）
+const DATA_DIR = path.join(app.getPath('appData'), 'exam-grader');
+try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (_) {}
+app.setPath('userData', DATA_DIR);
 
 function createWindow() {
   win = new BrowserWindow({
