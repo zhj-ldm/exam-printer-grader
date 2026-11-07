@@ -5,6 +5,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const S = {
   mode: 'auto',
   imagePath: null,
+  pageMode: 'split',
+  markSide: 'question',
   page: null,
   blocks: [],
   results: [],
@@ -205,7 +207,9 @@ function resetAll() {
 function options() {
   return {
     mode: $('optType').value,
-    gradeMode: $('optGradeMode').value,
+    gradeMode: 'precise',
+    pageMode: S.pageMode,
+    markSide: S.markSide,
     standardAnswer: $('stdAnswer').value,
     extraPrompt: $('extraPrompt').value,
     render: {
@@ -219,7 +223,8 @@ function options() {
 function optionsManual() {
   return {
     mode: $('optType').value,
-    gradeMode: $('optGradeMode').value,
+    gradeMode: 'precise',
+    markSide: S.markSide,
     standardAnswer: $('mStd').value || $('stdAnswer').value,
     extraPrompt: $('mExtra').value || $('extraPrompt').value,
     render: {
@@ -237,6 +242,26 @@ function syncFields(a, b) {
 }
 syncFields('stdAnswer', 'mStd');
 syncFields('extraPrompt', 'mExtra');
+
+// 批改范围切换：先切题再批改 / 整页直读（记住选择）
+document.querySelectorAll('#segPage button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#segPage button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    S.pageMode = btn.dataset.page;
+    API.setConfig({ pageMode: S.pageMode });
+  };
+});
+
+// 标记位置切换：题上 / 最右侧（记住选择）
+document.querySelectorAll('#segMark button').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('#segMark button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    S.markSide = btn.dataset.side;
+    API.setConfig({ markSide: S.markSide });
+  };
+});
 
 function renderList(results) {
   const list = $('list');
@@ -559,7 +584,6 @@ async function openSettings() {
   $('printQuality').value = cfg.printQuality || 'draft';
   $('printColor').value = cfg.printColor || 'color';
   refreshStorage();
-  refreshLocalOcr();
 }
 
 // 打印选项改动即保存
@@ -661,33 +685,6 @@ $('btnCleanTemp').onclick = async () => {
   await refreshStorage();
 };
 
-/* ---- 本地 OCR ---- */
-async function refreshLocalOcr() {
-  try {
-    const st = await API.localOcrStatus();
-    $('ocrUrl').textContent = st.url;
-    $('ocrModel').textContent = st.model;
-    $('ocrBin').textContent = st.bin || '未安装 llama-server';
-    $('ocrState').textContent = st.running ? `运行中（端口 ${st.port}）` : (st.modelsReady ? '未启动（模型已就绪）' : '模型未下载');
-  } catch (e) {
-    $('ocrState').textContent = '检测失败：' + e.message;
-  }
-}
-$('btnOcrCheck').onclick = refreshLocalOcr;
-$('btnOcrStart').onclick = async () => {
-  $('ocrState').textContent = '正在启动…';
-  const r = await API.localOcrStart();
-  log(r.message);
-  await API.setConfig({ localOcr: { enabled: r.ok, url: 'http://127.0.0.1:18080/v1/chat/completions', model: 'Xiaomi-OCR-0' } });
-  await refreshLocalOcr();
-};
-$('btnOcrStop').onclick = async () => {
-  const r = await API.localOcrStop();
-  log(r.message);
-  await API.setConfig({ localOcr: { enabled: false } });
-  await refreshLocalOcr();
-};
-
 /* ---------------- 进度事件 ---------------- */
 API.onStage(s => {
   if (S.resultMode) return;
@@ -707,11 +704,24 @@ document.body.classList.add('mode-auto');
 setOrb(null, IDLE_LABEL, IDLE_SUB);
 paintHistory();
 
-// 自动打印开关：记住上次的选择，下次打开软件保持不变
+// 记住上次的选择：自动打印、批改范围、标记位置，下次打开保持不变
+function pickSeg(sel, key, val) {
+  document.querySelectorAll(sel + ' button').forEach(b => {
+    b.classList.toggle('on', b.dataset[key] === val);
+  });
+}
 (async () => {
   try {
     const cfg = await API.getConfig();
     if (typeof cfg.autoPrint === 'boolean') $('optPrint').checked = cfg.autoPrint;
+    if (cfg.pageMode === 'whole' || cfg.pageMode === 'split') {
+      S.pageMode = cfg.pageMode;
+      pickSeg('#segPage', 'page', cfg.pageMode);
+    }
+    if (cfg.markSide === 'right' || cfg.markSide === 'question') {
+      S.markSide = cfg.markSide;
+      pickSeg('#segMark', 'side', cfg.markSide);
+    }
   } catch (_) { /* 首次运行无配置 */ }
 })();
 $('optPrint').addEventListener('change', () => {

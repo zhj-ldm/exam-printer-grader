@@ -73,11 +73,32 @@ function nextKey(retryIdx) {
   return runtime.keys[cursor];
 }
 
+// 容错解析：模型输出被截断或格式轻微损坏时，尽量保住已完整的部分
+function parseJsonLoose(text) {
+  const cleaned = String(text || '').replace(/```json|```/g, '').trim();
+  const s = cleaned.indexOf('{');
+  if (s === -1) return null;
+  const body = cleaned.slice(s);
+  try { return JSON.parse(body); } catch (_) {}
+
+  const tails = ['}', ']}', '"]}]}'];
+  let idx = body.length;
+  for (let n = 0; n < 120; n++) {
+    const cut = body.lastIndexOf('}', idx - 1);
+    if (cut < 0) break;
+    idx = cut;
+    const head = body.slice(0, cut + 1).replace(/,\s*$/, '');
+    for (const tail of tails) {
+      try { return JSON.parse(head + tail); } catch (_) {}
+    }
+  }
+  return null;
+}
+
 function parseJson(text) {
-  const cleaned = text.replace(/```json|```/g, '').trim();
-  const s = cleaned.indexOf('{'), e = cleaned.lastIndexOf('}');
-  if (s === -1 || e === -1) throw new Error('模型未返回 JSON：' + text.slice(0, 120));
-  return JSON.parse(cleaned.slice(s, e + 1));
+  const item = parseJsonLoose(text);
+  if (!item) throw new Error('模型未返回可用 JSON：' + String(text).slice(-160));
+  return item;
 }
 
 async function chat(prompt, imageDataUrl, { maxTokens = 900, retries = 6 } = {}) {
@@ -208,16 +229,17 @@ function essayPrompt(extraPrompt = '') {
 2. 按四个维度打分并给出小分：内容（立意是否明确、材料是否切题、中心是否突出）、结构（层次是否清楚、首尾是否呼应、详略是否得当）、语言（用词是否准确、句子是否通顺、有无修辞亮点）、书写（字迹是否工整、卷面是否整洁）。
 3. 总评 80-150 字：先肯定 1-2 个真实优点，再具体指出 1-2 个可改进之处（指出段落或句子的具体位置），最后给一句可操作的提升建议。
 4. 分数要落在常见区间，不要全部给满分；书写差不等于内容差，分别评价。
+5. 逐处挑出可修改的地方，输出 corrections 数组（3-8 条）：中文作文挑用词不当、搭配不当、病句、句式单调；英语作文挑语法错误、时态/单复数/冠词、拼写、用词与搭配。每条给出 from（原文片段）、to（改写后）、reason（10 字内原因）。英语作文的 from/to 保留英文原文。
 
 【非作文】
-type 填 exam 或 other，score 留 null，dims 留空对象 {}。
+type 填 exam 或 other，score 留 null，dims 留空对象 {}，corrections 给空数组。
 
 只返回 JSON，不要解释：
-{"type":"essay|exam|other","score":45,"fullScore":50,"dims":{"内容":18,"结构":12,"语言":12,"书写":3},"comment":"……"}`;
+{"type":"essay|exam|other","score":45,"fullScore":50,"dims":{"内容":18,"结构":12,"语言":12,"书写":3},"comment":"……","corrections":[{"from":"原文","to":"建议","reason":"用词"}]}`;
 }
 
 async function gradeEssay({ imageDataUrl, extraPrompt = '' }) {
-  const reply = await chat(essayPrompt(extraPrompt), imageDataUrl, { maxTokens: 1200 });
+  const reply = await chat(essayPrompt(extraPrompt), imageDataUrl, { maxTokens: 1600 });
   const item = parseJson(reply);
   const full = typeof item.fullScore === 'number' ? item.fullScore
     : (typeof item.full_score === 'number' ? item.full_score : undefined);
@@ -227,12 +249,23 @@ async function gradeEssay({ imageDataUrl, extraPrompt = '' }) {
     score = m ? parseFloat(m[1]) : null;
   }
   if (typeof score !== 'number') score = null;
+  const rawCorr = Array.isArray(item.corrections) ? item.corrections : [];
+  const corrections = rawCorr.map(c => {
+    if (typeof c === 'string') return { from: '', to: c, reason: '' };
+    return {
+      from: String(c.from || ''),
+      to: String(c.to || ''),
+      reason: String(c.reason || ''),
+    };
+  }).filter(c => c.to || c.from).slice(0, 8);
+
   return {
     type: item.type || 'other',
     score,
     fullScore: full ?? (score != null ? 50 : undefined),
     dims: item.dims && typeof item.dims === 'object' ? item.dims : {},
     comment: item.comment || '',
+    corrections,
   };
 }
 
@@ -311,4 +344,81 @@ async function gradePrecise({ no, imageDataUrl, standardAnswer = '', extraPrompt
   };
 }
 
-module.exports = { gradeBlock, gradeEssay, gradePrecise, chat, configure };
+function wholePagePrompt({ standardAnswer = '', extraPrompt = '' } = {}) {
+  const std = standardAnswer.trim()
+    ? `\n【标准答案（权威答案，优先以此为准）】\n${standardAnswer.trim()}`
+    : '\n【没有提供标准答案】请先独立解出每个空的标准答案，再逐空比对。';
+  const extra = extraPrompt.trim() ? `\n【老师额外要求】\n${extraPrompt.trim()}` : '';
+
+  return `这是一整页试卷的扫描图。不要切题，直接在这一页里找出所有“需要作答的空”（横线、括号、表格单元格、选择框、解答题的作答区），逐个判定。${std}${extra}
+
+规则：
+1. 不要预设学科；先读题干判断题型。不要回答“非数学/无法批改”“并非语文学科”之类的话。
+2. 按从上到下、从左到右的顺序，为每个空单独输出一条，包括已经答对的空，不能漏。数量可能很多（几十个）。
+3. 每个空给出学生实际写的内容；空白则 student 为 ""，verdict 为 "blank"。
+4. 判定按该空的标准答案：correct / partial / wrong / blank / uncertain。等价表达、单位省略、同义术语都算对。
+5. 每个空给出 box：该空在【整页图】中的矩形，归一化 0-1000 的 [x1,y1,x2,y2]，必须贴合空位本身，不要给整题框或整页框。
+6. comment 仅错因，15 字内；做对留空。
+7. 选择题若只有一个作答痕迹，按一个空处理。
+
+只返回 JSON，不要解释：
+{"blanks":[{"i":1,"student":"学生答案","correct":"标准答案","verdict":"correct|partial|wrong|blank|uncertain","box":[x1,y1,x2,y2],"comment":"错因"}],"comment":"整页总评"}`;
+}
+
+function normalizeBlanks(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return list.map((b, idx) => {
+    let verdict = b.verdict || 'uncertain';
+    if (verdict === 'half' || verdict === 'half_correct' || verdict === '半对') verdict = 'partial';
+    if (verdict === 'blank' && String(b.student || '').trim()) verdict = 'uncertain';
+    return {
+      i: Number(b.i) || idx + 1,
+      student: String(b.student || ''),
+      correct: String(b.correct || ''),
+      comment: String(b.comment || ''),
+      verdict,
+      box: sanitizeBox(b.box),
+    };
+  }).filter(b => b.box);
+}
+
+async function gradeWholePage({ imageDataUrl, standardAnswer = '', extraPrompt = '' }) {
+  const base = wholePagePrompt({ standardAnswer, extraPrompt });
+  let lastErr = null;
+  let best = { blanks: [], comment: '' };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // 上一次被截断/格式出错时，加严输出要求重新批改
+    const prompt = attempt === 0
+      ? base
+      : `${base}
+
+【上一次输出不合法（JSON 被截断或格式错误），请重新完整批改本页】
+- 必须输出一个语法完全合法的 JSON，最后一个字符必须是 }。
+- 不要输出任何解释、markdown 或代码块。
+- 每条只保留必要字段；comment 不超过 10 字；做对的空 comment 留空。
+- 如果空太多写不完，优先保证每个空都有 i、verdict、box，其次才是文字。`;
+
+    let reply;
+    try {
+      reply = await chat(prompt, imageDataUrl, { maxTokens: 4000 + attempt * 2000, retries: 2 });
+    } catch (e) {
+      lastErr = e;
+      continue;
+    }
+
+    const item = parseJsonLoose(reply);
+    if (!item) { lastErr = new Error('整页批改返回的 JSON 无法解析'); continue; }
+    const blanks = normalizeBlanks(item.blanks);
+    if (blanks.length > best.blanks.length) {
+      best = { blanks, comment: String(item.comment || '') };
+    }
+    if (blanks.length) return { blanks, comment: String(item.comment || '') };
+    lastErr = new Error('整页批改没有返回可用空位');
+  }
+  // 都失败时，退回截断修复能保住的那部分；一点都没有才报错
+  if (best.blanks.length) return best;
+  throw lastErr || new Error('整页批改失败');
+}
+
+module.exports = { gradeBlock, gradeEssay, gradePrecise, gradeWholePage, chat, configure };

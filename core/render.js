@@ -136,6 +136,42 @@ function esc(s) {
 
 const HAND_FONT = 'Hannotate SC, Xingkai SC, Kaiti SC, STKaiti';
 
+async function findBlankY(imagePath, W, H, needed = 150) {
+  try {
+    const sw = 600;
+    const { data, info } = await sharp(imagePath)
+      .resize({ width: sw })
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const cols = info.width, rows = info.height;
+    const blank = new Uint8Array(rows);
+    for (let r = 0; r < rows; r++) {
+      let dark = 0;
+      for (let c = 0; c < cols; c += 3) {
+        if (data[r * cols + c] < 120) dark += 1;
+      }
+      blank[r] = (dark / (cols / 3)) < 0.012 ? 1 : 0;
+    }
+    const scale = H / rows;
+    const startRow = Math.floor(rows * 0.45);
+    let best = null, runStart = -1;
+    for (let r = startRow; r <= rows; r++) {
+      if (r < rows && blank[r]) { if (runStart < 0) runStart = r; }
+      else if (runStart >= 0) {
+        const len = r - runStart;
+        if (len >= needed / scale && (!best || len > best.len)) best = { start: runStart, len };
+        runStart = -1;
+      }
+    }
+    if (!best) return null;
+    const y = Math.round(best.start * scale) + 30;
+    return Math.min(H - 40, y);
+  } catch (_) {
+    return null;
+  }
+}
+
 async function render(imagePath, page, marks, outPath, opts = {}) {
   const W = page.width, H = page.height;
   const showTicks = opts.ticks !== false;
@@ -198,27 +234,42 @@ async function render(imagePath, page, marks, outPath, opts = {}) {
     }
   }
 
-  // 整页/作文模式：在页面下方留白处输出评语块
+  // 整页/作文模式：红笔直接写在卷面上，不画边框
   if (opts.summary) {
     const s = opts.summary;
-    const x = 70;
-    let y = Math.round(H * 0.70);
+    const x = 80;
+    // 优先寻找页面下半部的空白带，避免评语压住正文
+    let y = await findBlankY(imagePath, W, H, 150);
+    if (y == null) y = Math.round(H * 0.72);
     const scoreText = s.score != null ? `${s.score}${s.fullScore ? ' / ' + s.fullScore : ''}` : '-';
-    const head = `AI 评阅　得分 ${scoreText}`;
-    body += `<rect x="${x - 16}" y="${y - 44}" width="${W - (x - 16) * 2}" height="${H * 0.27}" rx="12" fill="#ffffff" opacity="0.9" stroke="#1a3cb0" stroke-width="3"/>`;
-    body += `<text x="${x}" y="${y}" font-size="34" fill="#1a3cb0" font-family="PingFang SC" font-weight="600">${esc(head)}</text>`;
+    body += `<text x="${x}" y="${y}" font-size="54" fill="#c81e1e" font-family="${HAND_FONT}">得分 ${esc(scoreText)}</text>`;
     y += 46;
     const dims = s.dims && typeof s.dims === 'object' ? Object.entries(s.dims) : [];
     if (dims.length) {
       const txt = dims.map(([k, v]) => `${k} ${v}`).join('　');
-      body += `<text x="${x}" y="${y}" font-size="28" fill="#2b4a8f" font-family="PingFang SC">${esc(txt)}</text>`;
-      y += 38;
+      body += `<text x="${x}" y="${y}" font-size="30" fill="#c81e1e" font-family="${HAND_FONT}">${esc(txt)}</text>`;
+      y += 40;
     }
     const maxChars = Math.floor((W - x * 2) / (FS * 0.95));
     const text = String(s.comment || '');
-    for (let i = 0; i < text.length && y < H * 0.70 + H * 0.24; i += maxChars) {
-      body += `<text x="${x}" y="${y}" font-size="${FS}" fill="#1a3cb0" font-family="PingFang SC">${esc(text.slice(i, i + maxChars))}</text>`;
+    for (let i = 0; i < text.length && y < H * 0.92; i += maxChars) {
+      body += `<text x="${x}" y="${y}" font-size="${FS}" fill="#c81e1e" font-family="${HAND_FONT}">${esc(text.slice(i, i + maxChars))}</text>`;
       y += FS + 10;
+    }
+    const corr = Array.isArray(s.corrections) ? s.corrections : [];
+    if (corr.length) {
+      y += 8;
+      body += `<text x="${x}" y="${y}" font-size="30" fill="#c81e1e" font-family="${HAND_FONT}">修改建议：</text>`;
+      y += 38;
+      for (const c of corr) {
+        if (y >= H * 0.95) break;
+        const line = c.from ? `${c.from} → ${c.to}${c.reason ? '（' + c.reason + '）' : ''}`
+          : `${c.to}${c.reason ? '（' + c.reason + '）' : ''}`;
+        for (let i = 0; i < line.length && y < H * 0.95; i += maxChars) {
+          body += `<text x="${x}" y="${y}" font-size="28" fill="#c81e1e" font-family="${HAND_FONT}">${esc(line.slice(i, i + maxChars))}</text>`;
+          y += 34;
+        }
+      }
     }
   }
 

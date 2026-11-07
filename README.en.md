@@ -104,22 +104,14 @@ rm -rf node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}
 
 ## Settings
 
-### Per-blank precise mode (local OCR)
+### Per-blank precise grading
 
-For worksheets with many blanks (e.g. chemistry, 10–30 blanks per question), switch **Grading mode** to *Precise (per blank, multiple ticks)*:
+For worksheets with many blanks (e.g. chemistry, 10–30 blanks per question), switch **Grading mode** to *Precise (per blank, multiple ticks)* and choose a **grading scope**:
 
-1. Local [Xiaomi-OCR-0 (4-bit GGUF)](https://huggingface.co/prithivMLmods/Xiaomi-OCR-0-GGUF) transcribes the whole page first (question numbers, stems, blanks, handwritten answers).
-2. The cloud vision model returns **answer, verdict and bounding box for every blank**.
-3. The renderer draws a tick/cross/half mark next to each blank and writes the correct answer.
+1. **Split first**: blocks are cropped by question number; the cloud vision model returns **answer, verdict and bounding box for every blank**; the renderer draws a tick/cross/half mark next to each blank.
+2. **Whole page**: no splitting — the full page goes straight to the cloud vision model, which finds every blank itself. Best for irregular layouts or pages without question numbers; falls back to split grading automatically if it fails.
 
-Setup:
-
-```bash
-brew install llama.cpp
-./scripts/setup-local-ocr.sh   # ~700MB weights into the app data directory
-```
-
-Then press **Start service** in *Settings → Local OCR* (default `127.0.0.1:18080`). If the service is unavailable, precise mode falls back to standard per-question grading.
+Neither mode requires downloading any local OCR model.
 
 ### Grading model
 
@@ -270,8 +262,7 @@ Runs the full pipeline headlessly and writes a matching `.json` summary.
 
 ## Roadmap
 
-- Integrate structured document-understanding models (e.g., Xiaomi-OCR-0) for better layout and long-passage context in reading-comprehension tasks.
-- Grade reading questions with "passage + sub-questions + rubric" jointly.
+- Joint grading of reading passages ("material + sub-questions + scoring points").
 - Windows / Linux printing and scanning adapters.
 
 ## License

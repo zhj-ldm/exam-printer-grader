@@ -2,8 +2,7 @@
 const sharp = require('sharp');
 const { split } = require('./ocr');
 const { prepareImage } = require('./prepare');
-const { gradeBlock, gradeEssay, gradePrecise } = require('./grade');
-const { readPage } = require('./localocr');
+const { gradeBlock, gradeEssay, gradePrecise, gradeWholePage } = require('./grade');
 const { render } = require('./render');
 
 const PAD = 48;
@@ -139,6 +138,26 @@ async function pageInfo(imagePath) {
   return { width: m.width, height: m.height };
 }
 
+// 标记位置：题上（模型/题号附近，可能有误差）或统一贴到页面最右侧一列
+function applyMarkSide(marks, page, side) {
+  if (side !== 'right' || !marks.length) return marks;
+  const x = page.width - 96;
+  const list = [...marks].sort((a, b) => a.y - b.y);
+  let lastY = -1e9;
+  for (const m of list) {
+    let y = Math.max(46, Math.min(page.height - 60, m.y));
+    if (y - lastY < 92) y = lastY + 92;
+    if (y > page.height - 60) y = page.height - 60;
+    m.x = x;
+    m.y = Math.round(y);
+    m.side = 'right';
+    m.textX = Math.max(30, page.width - 470);
+    m.textY = Math.round(y + 24);
+    lastY = y;
+  }
+  return marks;
+}
+
 async function splitPage(imagePath, onStage = () => {}) {
   const prep = await prepareImage(imagePath, onStage);
   onStage({ stage: 'split', label: '识别题号' });
@@ -191,7 +210,7 @@ async function gradeOne({ imagePath, page, block, options = {}, pageText = '' })
       const spot = spotFor(block, page);
       marks.push(toMark(r, spot, page, options.render || {}));
     }
-    return { result: r, marks };
+    return { result: r, marks: applyMarkSide(marks, page, options.markSide) };
   }
 
   const r = await gradeBlock({
@@ -213,7 +232,9 @@ async function gradeOne({ imagePath, page, block, options = {}, pageText = '' })
     spot = spotFor(block, page);
   }
   const withText = { ...spot, ...(await findTextSpot(buf, origin, spot, page)) };
-  return { result: r, mark: toMark(r, withText, page, options.render || {}) };
+  const mark = toMark(r, withText, page, options.render || {});
+  applyMarkSide([mark], page, options.markSide);
+  return { result: r, mark };
 }
 
 async function runEssay({ imagePath, outPath, options = {}, onStage = () => {}, page }) {
@@ -227,6 +248,43 @@ async function runEssay({ imagePath, outPath, options = {}, onStage = () => {}, 
   return { page, mode: 'essay', summary, results: [], marks: [], imagePath };
 }
 
+async function runWholePage({ imagePath, outPath, page, options = {}, onStage = () => {} }) {
+  onStage({ stage: 'grade', label: '整页直读（不切题）' });
+  const { dataUrl } = await cropBlock(imagePath, { x0: 0, y0: 0, x1: page.width, y1: page.height }, page);
+  const r = await gradeWholePage({
+    imageDataUrl: dataUrl,
+    standardAnswer: options.standardAnswer,
+    extraPrompt: options.extraPrompt,
+  });
+  if (!r.blanks.length) throw new Error('整页批改没有返回可用空位');
+
+  const marks = [];
+  const results = [];
+  for (const b of r.blanks) {
+    const [bx1, by1, bx2, by2] = b.box;
+    const x = (bx1 + bx2) / 2 * page.width / 1000;
+    const y = (by1 + by2) / 2 * page.height / 1000;
+    const text = b.verdict !== 'correct' && options.render?.answers !== false
+      ? (b.correct ? '应: ' + b.correct : b.comment)
+      : (b.comment || '');
+    const mark = {
+      x: Math.round(x), y: Math.round(y),
+      verdict: b.verdict, point: true, blank: b.i, text,
+      textX: Math.round(Math.max(30, Math.min(page.width - 220, bx1 * page.width / 1000))),
+      textY: Math.round(Math.max(24, by1 * page.height / 1000 - 16)),
+    };
+    marks.push(mark);
+    results.push({
+      no: b.i, verdict: b.verdict, student: b.student,
+      correct: b.correct, comment: b.comment, page_box: mark,
+    });
+  }
+  onStage({ stage: 'render', label: `共 ${marks.length} 个空，生成批改图` });
+  applyMarkSide(marks, page, options.markSide);
+  await render(imagePath, page, marks, outPath, options.render || {});
+  return { page, blocks: [], results, marks, imagePath, mode: 'whole' };
+}
+
 async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {} }) {
   const prep = await prepareImage(imagePath, onStage);
   imagePath = prep.imagePath;
@@ -236,6 +294,16 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
 
   if (options.mode === 'essay') {
     return runEssay({ imagePath, outPath, options, onStage, page });
+  }
+
+  // 整页直读：不切题，整页交给模型自己找空位；失败时自动退回切题批改
+  if (options.pageMode === 'whole') {
+    try {
+      const r = await runWholePage({ imagePath, outPath, page, options, onStage });
+      return { ...r, rotation: prep.rotation };
+    } catch (e) {
+      onStage({ stage: 'split', label: '整页直读失败，改按切题批改' });
+    }
   }
 
   let blocks;
@@ -251,12 +319,6 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
   if (!blocks.length) throw new Error('没有切出题目');
   onStage({ stage: 'split', label: `找到 ${blocks.length} 道题`, progress: 1 });
 
-  let pageText = '';
-  if (options.gradeMode === 'precise') {
-    onStage({ stage: 'ocr', label: '本地 OCR 预处理整页' });
-    try { pageText = (await readPage(imagePath)) || ''; } catch (_) { pageText = ''; }
-  }
-
   const results = new Array(blocks.length).fill(null);
   const marks = [];
   let done = 0;
@@ -265,7 +327,7 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
     const b = blocks[i];
     onStage({ stage: 'grade', label: `批改第 ${b.no} 题`, done, total: blocks.length });
     try {
-      const { result, mark, marks: mks } = await gradeOne({ imagePath, page, block: b, options, pageText });
+      const { result, mark, marks: mks } = await gradeOne({ imagePath, page, block: b, options });
       const list = mks || (mark ? [mark] : []);
       results[i] = { ...result, page_box: list[0] };
       marks.push(...list);
@@ -289,6 +351,7 @@ async function runPipeline({ imagePath, outPath, options = {}, onStage = () => {
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, blocks.length) }, worker));
 
   onStage({ stage: 'render', label: '生成批改图' });
+  applyMarkSide(marks, page, options.markSide);
   await render(imagePath, page, marks, outPath, options.render || {});
   return { page, blocks, results: results.filter(Boolean), marks, imagePath, rotation: prep.rotation };
 }

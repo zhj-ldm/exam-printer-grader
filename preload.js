@@ -26,7 +26,4 @@ contextBridge.exposeInMainWorld('api', {
   printerInfo: () => ipcRenderer.invoke('printer-info'),
   clearQueue: () => ipcRenderer.invoke('clear-queue'),
   testPrint: () => ipcRenderer.invoke('test-print'),
-  localOcrStatus: () => ipcRenderer.invoke('local-ocr-status'),
-  localOcrStart: () => ipcRenderer.invoke('local-ocr-start'),
-  localOcrStop: () => ipcRenderer.invoke('local-ocr-stop'),
 });
