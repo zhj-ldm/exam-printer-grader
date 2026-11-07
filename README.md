@@ -28,11 +28,11 @@
 
 ## 演示视频
 
-> 视频待补充：录制一段「放纸 → 点按钮 → 出批改后的纸」的完整流程后嵌入这里。
+▶ [播放或下载演示视频](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4)
 
-<!-- 视频嵌入示例：
-https://github.com/user-attachments/assets/xxxxxxxx
--->
+<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
+
+> 完整流程：把作业放到扫描仪 → 点击按钮 → 自动扫描、批改 → 打印出批改后的新作业。
 
 ## 主要功能
 
