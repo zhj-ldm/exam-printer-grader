@@ -49,6 +49,9 @@ function createWindow() {
 app.whenReady().then(() => {
   outDir(); histDir();
   sweepTemp();
+  // 用本机已保存的设置初始化模型客户端（地址/模型/Key 不写死在代码里）
+  const saved = loadCfg();
+  configure({ baseUrl: saved.baseUrl, model: saved.model, apiKeys: saved.apiKeys });
   createWindow();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
