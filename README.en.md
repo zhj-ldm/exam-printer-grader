@@ -1,97 +1,133 @@
-# Exam Printer Grader
+<p align="center">
+  <img src="docs/readme-hero.png" alt="Exam Printer Grader">
+</p>
 
-[简体中文](README.md) | [English](README.en.md)
+<p align="center">
+  <a href="https://github.com/zhj-ldm/exam-printer-grader/releases/latest"><img alt="release" src="https://img.shields.io/github/v/release/zhj-ldm/exam-printer-grader?style=flat-square&color=5acbff"></a>
+  <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20arm64-111827?style=flat-square">
+  <img alt="electron" src="https://img.shields.io/badge/Electron-45-47848F?style=flat-square&logo=electron">
+  <img alt="license" src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square">
+  <img alt="scanner" src="https://img.shields.io/badge/scanner-eSCL%20%2F%20AirScan-41e1bd?style=flat-square">
+</p>
 
-> A desktop system that recreates the experience of a dedicated exam-grading machine (like iFLYTEK's) using an ordinary scanner-printer all-in-one.
+<p align="center">
+  <b>English</b> · <a href="README.md">简体中文</a>
+</p>
 
----
+<p align="center">
+  <b>Put a worksheet on the scanner, press one button, and get a newly printed, graded copy.</b><br>
+  Turn an ordinary scanner-printer all-in-one into a personal AI exam-grading machine.
+</p>
+
+<details>
+<summary><b>Contents</b></summary>
+
+- [What It Is](#what-it-is)
+- [How It Differs](#how-it-differs)
+- [Demo](#demo)
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Quick Start](#quick-start)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Data & Privacy](#data--privacy)
+
+</details>
 
 ## What It Is
 
-Put a completed worksheet or exam paper **face-up on your printer's scanner glass**, press one button, and the system automatically:
+A desktop pipeline that connects **scanning, OCR question splitting, vision-model grading, handwritten-mark rendering, and printing**.
 
-scans → auto-rotates → trims blank margins → runs OCR to split questions → grades each question with a vision LLM → overlays handwritten ticks / crosses / half-marks / comments onto the page → prints a new copy.
+Place a completed worksheet face-up on the scanner glass and click the liquid orb. The system automatically:
 
-This is **not** an "upload a photo and let AI grade it" tool. The whole workflow is tied to the printer: papers come from the scanner and results come out of the printer. The goal is to reproduce an expensive exam-grading machine at home with the cheapest hardware people already own.
+```text
+scan → auto-orient → trim margins → OCR question split
+     → grade each question with a vision model
+     → place ticks / crosses / half-marks / comments
+     → print a freshly graded copy
+```
 
-## How It Differs From Typical AI Graders
+This is not an "upload a photo and let AI comment" tool. **Papers come from the scanner and results come out of the printer**; the workflow is built around the all-in-one device.
 
-| | Typical AI grading app | This project |
-|---|---|---|
-| Input | Manual photo / file upload | Automatic scan from printer |
+> **Important: the printed result is a new copy of the worksheet.**<br>
+> It works like copying the original and grading the copy, rather than feeding the original back into the printer. This is intentional: reprinting adapts to different paper, binding and printer hardware far better than trying to mark the original sheet.
+
+## How It Differs
+
+| | Typical AI grading tool | Exam Printer Grader |
+| --- | --- | --- |
+| Input | Manual photo / upload | Automatic scan from the printer |
 | Output | On-screen result / image download | A newly printed paper copy |
-| Hardware | Independent of printers | Scanner and printer are core to the flow |
-| Positioning | Image-processing utility | Affordable home "grading machine" |
+| Hardware | Independent of the printer | Scanner and printer are part of the flow |
+| Positioning | Image-processing utility | Affordable home grading-machine alternative |
 
-**Important: the printed output is a new copy of the worksheet, not annotations on the original paper.**
-This is intentional. Reprinting works with any paper, printer and binding, while feeding the original sheet back into a printer is fragile and hardware-dependent.
+## Demo
 
-## Demo Video
+▶ **[Watch the full demo](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4)**
 
-▶ [Play or download the demo](https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4)
-
-<video src="https://github.com/zhj-ldm/exam-printer-grader/releases/download/v1.0.0/exam-grader-demo.mp4" poster="https://raw.githubusercontent.com/zhj-ldm/exam-printer-grader/main/assets/demo-poster.jpg" controls width="720"></video>
-
-> Full flow: place the paper on the scanner → press the button → automatic scan and grading → a newly printed graded copy.
+> Place the paper on the scanner → click the button → automatic scan and grading → a newly printed graded copy.
 
 ## Features
 
-- **One-click pipeline**: scan, split, grade, render in one flow.
-- **Multi-page scanning**: choose Single / Multi in auto mode. In multi mode, scan page after page with a "next page" prompt, then press Start to grade all pages; results are viewed and printed page by page.
-- **Scannable answer key**: press "Scan answer" next to the standard-answer box to scan an answer sheet and auto-format it as "no. answer" lines.
-- **Optional AI review pass**: before final rendering, the graded page image is sent back to the model to check for missed questions and badly placed ticks/comments, then re-rendered after adjustments. Review rounds are configurable (default 1, max 3) and work with any grading mode.
-- **Automatic orientation**: handles upside-down and sideways pages (0° / 90° / 180° / 270°) by OCR scoring.
-- **Automatic margin trimming**: locates the content area and removes blank scanner borders; printed output fills the page.
-- **Reliable question splitting**: anchored on OCR-detected question numbers; boundaries are intentionally generous so answers are never cut off.
-- **Handwritten-style marks**: smooth, slightly jittery ticks; half-marks are a tick crossed by a slash; crosses are two offset strokes; comments are placed near answers.
+- **One-click pipeline**: a single liquid-orb button runs scan, split, grade and render.
+- **Multi-page scanning**: single or multi-page auto mode; scan pages first, grade them together, then review and print page by page.
+- **Scannable answer key**: press "Scan answer" to scan an answer sheet and format it as "number. answer" lines; manual editing is also supported.
+- **Optional AI review pass**: send the final image back to the model to catch missed questions and badly placed marks; configurable rounds (default 1, max 3).
+- **Automatic orientation**: handles 0° / 90° / 180° / 270° pages.
+- **Automatic margin trimming**: locates the content area and removes scanner borders.
+- **Question splitting**: OCR question-number anchors with generous boundaries so answers are never cut off.
+- **Handwriting engine**: smooth, slightly jittery ticks; half-marks are a tick crossed by a slash; crosses are two offset strokes; comments are supported.
 - **Toggles**: ticks, comments, correct answers, auto-print after grading.
-- **Result-only mode**: after grading, the UI shows only the final graded page with a pill button to print or start the next paper.
-- **History**: stored locally; browse previous results, delete single entries; the list starts empty on launch without deleting files.
-- **Print controls**: choose printer, quality (draft/normal/high), color or grayscale; settings persist.
-- **Model freedom**: any **OpenAI-compatible** vision model, cloud or local (LM Studio / Ollama / vLLM), no vendor lock-in.
+- **Result-only mode**: after grading, only the final page is shown with print / next-paper actions.
+- **History**: results stay local; browse, switch and delete individual entries. The list starts empty without deleting files.
+- **Print controls**: printer, print quality and color mode, persisted across launches.
+- **Model freedom**: any OpenAI-compatible vision model, cloud or local (LM Studio / Ollama / vLLM), no vendor lock-in.
 
 ## How It Works
 
-```
+```text
 Scanner (eSCL)
    │  HTTP image fetch
    ▼
 Auto-orient (OCR score @ 0° / 90° / 180° / 270°)
    ▼
-Trim blank margins (OCR text bbox → crop)
+Trim margins (text bounding boxes / dark-pixel distribution)
    ▼
 Split questions (PaddleOCR numbers → block coordinates)
    ▼
-Crop each question + vision LLM grading (OpenAI-compatible)
+Crop blocks + vision-model grading (OpenAI-compatible)
    ▼
 Anchor points → SVG handwriting → sharp compositing
    ▼
-CUPS (lp) printing / save history
+CUPS (lp) printing / local history
 ```
 
-## Requirements
+## Quick Start
 
-- macOS (current release is Apple Silicon / arm64)
+### Requirements
+
+- macOS (the current release is Apple Silicon / arm64)
 - A network scanner supporting **eSCL / AirScan** (most AirPrint all-in-ones do)
-- A printer already available in System Settings → Printers & Scanners
+- A printer available under System Settings → Printers & Scanners
 
-> Windows / Linux: grading, OCR and rendering are cross-platform Node code; scanning and printing need platform adapters (see "Cross-platform notes").
-
-## Run From Source
+### Run From Source
 
 ```bash
+git clone https://github.com/zhj-ldm/exam-printer-grader.git
+cd exam-printer-grader
 npm install
 npm start
 ```
 
-### Package the macOS app
+### Package a macOS App
 
 ```bash
 npx @electron/packager . "试卷批改" --platform=darwin --arch=arm64 \
   --out=dist --asar=false --overwrite --prune=true
 ```
 
-Optionally remove unused native binaries to shrink the bundle:
+Optional: remove unused platform binaries to shrink the bundle.
 
 ```bash
 rm -rf node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}
@@ -99,175 +135,95 @@ rm -rf node_modules/onnxruntime-node/bin/napi-v6/{linux,win32}
 
 ## Usage
 
-1. Place the paper **face up** on the scanner glass (upside-down is auto-corrected).
+1. Place the worksheet **face up** on the scanner glass (reversed pages are auto-corrected).
 2. Open the app and click the central liquid orb.
 3. The app scans, detects question numbers and grades each question.
-4. When finished, the UI switches to result-only mode showing the graded page.
-5. Press **Print** to output a new copy, or **Next** to clear and start another paper.
+4. When finished, the result-only page shows the graded sheet.
+5. Press **Print** to output a new copy, or **Next** to start another worksheet.
 
-## Settings
+## Configuration
 
-### Per-blank precise grading
+### Grading Model
 
-For worksheets with many blanks (e.g. chemistry, 10–30 blanks per question), switch **Grading mode** to *Precise (per blank, multiple ticks)* and choose a **grading scope**:
-
-1. **Split first**: blocks are cropped by question number; the cloud vision model returns **answer, verdict and bounding box for every blank**; the renderer draws a tick/cross/half mark next to each blank.
-2. **Model framing**: the vision model first frames each question's full region (number, stem, options/material, answer area) like a question-search app, then grades each crop. Best for two questions sharing one row, irregular layouts or missing question numbers; falls back to split grading on failure.
-3. **Whole page**: no splitting — the full page goes straight to the cloud vision model, which finds every blank itself. Best for irregular layouts or pages without question numbers; falls back to split grading automatically if it fails.
-
-None of these modes requires downloading a local OCR model.
-
-### Grading model
-
-- **Source**: `Cloud (OpenAI-compatible)` or `Local (LM Studio / Ollama, etc.)`
+- **Source**: Cloud (OpenAI-compatible) or local (LM Studio / Ollama, etc.)
 - **Endpoint**: any OpenAI-compatible `/v1/chat/completions`
 - **Model name**: any vision-capable model
-- **API keys**: comma-separated, rotated automatically; not required for local servers
+- **API keys**: comma-separated; keys rotate automatically. Local servers usually need none.
 
-Only the standard OpenAI protocol (`messages` + `image_url`) is used. No vendor, no vendor-specific environment variables. The default placeholder `https://api.openai.com/v1/chat/completions` is a format example and can be replaced with any compatible service.
+Only the standard OpenAI protocol (`messages` + `image_url`) is used; no vendor-specific environment variables. The default placeholder `https://api.openai.com/v1/chat/completions` is just an example and can be replaced with any compatible endpoint.
+
+### Precise Per-Blank Grading
+
+Designed for worksheets with many blanks (e.g. chemistry, 10–30 blanks per question). Switch the grading mode to **Precise (per blank, multiple ticks)** and choose a scope:
+
+| Mode | How it works | Best for |
+| --- | --- | --- |
+| Split first | Split by question number; the model returns answer, verdict and bounding box per blank | Standard worksheet layouts |
+| Model framing | The model frames the complete question region first, then grades each crop | Two questions per row, missing numbers, irregular layouts |
+| Whole page | Send the full page and let the model find every blank itself | Complex columns or pages without question numbers |
+
+All three modes rely only on the vision model and require no local OCR download. Framing/whole-page modes fall back to split grading on failure.
 
 ### Scanner
 
-- Auto-discovery of eSCL scanners on the LAN
+- Auto-discovery of eSCL scanners on the local network
 - Manual IP entry
-- Status, model, scan source and max dpi display
+- Status, model, scan source and maximum dpi display
 
 ### Printing
 
-- Select the printer (default or explicit)
-- Speed: draft / normal / high
-- Color: color / grayscale
-- Always plain paper to prevent drivers from switching to slow photo mode
+- Default or explicit printer selection
+- Draft / normal / high quality
+- Color / grayscale
+- Plain-paper output to avoid slow photo-mode drivers
 
-### Storage & cleanup
+### Storage & Cleanup
 
-- Show current storage directory and usage
-- Change or open the directory
-- Clear temporary files and report freed bytes
-- Auto-clean scan temp files older than 24 hours on launch
+- Show storage directory and usage; change or open the folder
+- Clean temporary files in one click
+- Automatically remove temporary scans older than 24 hours on launch
 
-## Code Structure
+## Architecture
 
-```
-grade-app/
-├── main.js              Electron main process: window, IPC, config, storage, printing
-├── preload.js           Secure bridge exposing a whitelisted API
-├── cli.js               Headless pipeline: split → grade → render
-├── core/
-│   ├── scan.js          eSCL discovery/scan + CUPS printing/queue
-│   ├── ocr.js           PaddleOCR(ONNX), question-number clustering, block building
-│   ├── prepare.js       Auto-orientation + blank-margin trimming
-│   ├── pipeline.js      Cropping, concurrent grading, anchors, rendering, essay mode
-│   ├── grade.js         OpenAI-compatible client, prompts, retry and rate limiting
-│   └── render.js        SVG handwriting engine + sharp compositing
-├── ui/
-│   ├── index.html       UI and styles (liquid orb, result page, settings)
-│   └── app.js           State machine, interactions, IPC calls
-├── chi_sim.traineddata  Tesseract Chinese fallback model
-└── eng.traineddata      Tesseract English fallback model
+```text
+main.js              Electron main process: windows, IPC, config, storage, printing
+preload.js           contextBridge allow-listed API
+cli.js               Headless pipeline: split → grade → render
+core/
+  scan.js            eSCL discovery / capture + CUPS printing
+  ocr.js             PaddleOCR(ONNX), number clustering, block splitting
+  prepare.js         auto-orient + margin trim
+  pipeline.js        crop, concurrent grading, anchors, rendering
+  grade.js           OpenAI-compatible grading, prompts, retries, rate limiting
+  render.js          SVG handwriting engine + sharp compositing
+ui/                  Liquid-orb UI, result page, settings
 ```
 
-### Module details
-
-#### `main.js`
-
-- Frameless window (`titleBarStyle: hiddenInset`) loading `ui/index.html`.
-- Injects stored API keys into `GRADER_API_KEYS` before loading the grading module.
-- IPC: auto pipeline, scan, pick image, split, grade one, render, print, history list/delete, storage select/open, temp cleanup, model connectivity test.
-- Config at `~/Library/Application Support/exam-grader/config.json`; scan temp in `out/`, results in `history/` (both can be relocated via settings).
-- Deleting history removes the jpg + json; clearing on launch only clears the UI list.
-- Printing uses `lp` with `-d`, `fit-to-page`, `PageSize=A4`, `MediaType=stationery`, `cupsPrintQuality`, `ColorModel`.
-
-#### `preload.js`
-
-`contextIsolation: true`; the renderer gets only fixed methods via `contextBridge`.
-
-#### `core/scan.js`
-
-- `discover()` probes `http://IP/eSCL/ScannerCapabilities` on common LAN ranges.
-- `scan()` creates a ScanJob and polls `NextDocument` for JPEG; platen, 300 dpi, A4, RGB24.
-- `printerInfo()`, `clearQueue()`, `testPrint()` wrap `lpstat` / `cancel` / `lp`.
-- Handles XML variations from HP and others.
-
-#### `core/ocr.js`
-
-- PaddleOCR PP-OCRv4 ONNX; long edge scaled to 1600 before recognition; temp files deleted after use.
-- Falls back to tesseract (`chi_sim` + `eng`).
-- `pickNumbers()` finds question-number candidates, clusters by left edge, keeps the cleanest column, fills gaps.
-- `buildBlocks()` starts 0.5 line above the number and ends 1.2 lines below the next question's number (deliberately over-inclusive).
-- `split()` accepts precomputed OCR results so orientation and splitting share one pass.
-
-#### `core/prepare.js`
-
-- `orient()`: scores OCR results (question numbers + valid text mass) at 0°, 180°, then 90°/270° when still ambiguous, and picks the best orientation.
-- `trim()`: uses the OCR text bbox (3% horizontal, 2.5% top, 10% bottom padding); without text, falls back to dark-pixel distribution while ignoring noise and paper edges.
-- Cropping is translation-only, so OCR coordinates are shifted instead of re-recognized.
-
-#### `core/pipeline.js`
-
-- Preprocess → split → crop each block (48 px padding).
-- Concurrent grading with retries; answer points normalized to 0–1000 then mapped to page pixels.
-- Builds marks (tick/cross/half/comment/answer text).
-- Separate essay/full-page mode with dimension scores and comments.
-- Final composite with `render()`.
-
-#### `core/grade.js`
-
-- Standard OpenAI `chat/completions` with `text` + `image_url`.
-- Multi-key rotation, RPM limiting, retries.
-- Per-question prompt returns strict JSON: `verdict`, `answer_point`, student answer, correct answer, comment.
-- Essay prompt scores content/structure/language/handwriting and writes a comment.
-- Endpoint/model/keys hot-reload at runtime; nothing hard-coded to a vendor.
-
-#### `core/render.js`
-
-- Seeded RNG: deterministic per result but visually random.
-- Catmull-Rom splines with low-frequency vertical jitter.
-- Stroke width varies on entry, body and exit to imitate pen pressure.
-- `tickMark` one continuous tick; `crossMark` two offset strokes; `halfMark` tick plus a crossing slash; comment text follows anchors.
-- Outputs JPEG for printing and history.
-
-#### `ui/index.html` and `ui/app.js`
-
-- Large liquid orb with layered gradients, glass highlight, blob morph and breathing animation, colored by stage.
-- Scanned/graded images sit semi-transparent behind the orb.
-- Result-only mode hides panels and shows the graded page plus top pill buttons (print / next).
-- State machine: idle → scan → split → grade → render → result; mutually exclusive layers.
-- History is not auto-loaded; thumbnails lazy-load; delete single entries.
-- Auto-print state saved in config and restored on launch.
-- Reset clears result arrays and `<img src>` to avoid retaining large images.
-
-#### `cli.js`
+Headless debugging:
 
 ```bash
 node cli.js --image /path/to/scan.jpg --out /tmp/graded.jpg
 ```
 
-Runs the full pipeline headlessly and writes a matching `.json` summary.
-
 ## Data & Privacy
 
-- Scans and results stay on the local machine; question crops are sent to a cloud endpoint only if you configure one.
-- API keys live in the local config file and are not shipped with the repo.
+- Scans and results stay on the local machine.
+- Question crops are sent to a cloud service only when you configure a cloud endpoint.
+- API keys stay in the local config file and are not shipped with the repository.
 - The repository and release bundles contain no vendor branding, keys or user data.
 
 ## Known Limitations
 
-- Current release is macOS arm64; Windows/Linux need scanner and printer adapters.
-- Scanning requires eSCL; vendor-private or USB-only scanners must use the manual image mode.
+- The current release targets macOS arm64; Windows/Linux need scanner and printer adapters.
+- Scanning requires eSCL; vendor-private or USB-only scanners must use manual image selection.
 - Handwriting recognition and subjective grading depend on image quality and model capability; complex reading-comprehension tasks can still be imperfect.
-- Printing outputs a fresh page and does not preserve staples/folds of the original.
+- Printing produces a fresh page and does not preserve binding, folds or other physical details of the original.
 
 ## Cross-platform Notes
 
-- Grading/OCR/rendering is cross-platform Node + sharp.
-- Printing: macOS uses `lp`; Windows can use `webContents.print()` or SumatraPDF CLI; Linux can use `lp`.
-- Scanning: network eSCL works everywhere; USB scanners need WIA on Windows and ImageCapture on macOS.
-
-## Roadmap
-
-- Joint grading of reading passages ("material + sub-questions + scoring points").
-- Windows / Linux printing and scanning adapters.
+- Grading / OCR / rendering are cross-platform Node + sharp code.
+- Printing: macOS uses `lp`; Windows can use `webContents.print()` or SumatraPDF CLI; Linux can still use `lp`.
+- Scanning: network eSCL works on all platforms; USB scanners need native scanning APIs per platform.
 
 ## License
 
